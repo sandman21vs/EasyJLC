@@ -1,4 +1,4 @@
-"""Janela principal do EasyJLC (tabview: Download / Histórico / Log)."""
+"""Janela principal do EasyJLC (tabview: Buscar / Download / Histórico / Log)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,13 @@ import customtkinter as ctk
 from easyjlc import __version__
 from easyjlc import history as history_module
 from easyjlc import settings as settings_module
-from easyjlc.core import EasyEdaRunner
+from easyjlc.core import EasyEdaRunner, JlcClient
 from easyjlc.history import History, HistoryEntry
 from easyjlc.settings import Settings
 from easyjlc.ui.download_tab import DownloadTab
 from easyjlc.ui.history_tab import HistoryTab
 from easyjlc.ui.log_tab import LogTab
+from easyjlc.ui.search_tab import SearchTab
 
 log = logging.getLogger("easyjlc.main_window")
 
@@ -25,15 +26,17 @@ class MainWindow(ctk.CTk):
         user_settings: Settings,
         history: History,
         runner: EasyEdaRunner,
+        jlc_client: JlcClient | None = None,
     ) -> None:
         super().__init__()
         self.user_settings = user_settings
         self.history = history
         self.runner = runner
+        self.jlc_client = jlc_client or JlcClient()
 
         self.title(f"EasyJLC {__version__}")
-        self.geometry(user_settings.window_geometry or "960x640")
-        self.minsize(720, 480)
+        self.geometry(user_settings.window_geometry or "1100x720")
+        self.minsize(820, 520)
 
         ctk.set_appearance_mode(user_settings.theme)
         ctk.set_default_color_theme("blue")
@@ -57,14 +60,15 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(
             header,
-            text="Download de símbolos e footprints KiCad via LCSC/EasyEDA",
+            text="Busca, preço, estoque e download KiCad via JLCPCB/LCSC",
             font=ctk.CTkFont(size=12),
             text_color="gray70",
         ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
 
         self.tabs = ctk.CTkTabview(self)
         self.tabs.grid(row=1, column=0, sticky="nsew", padx=16, pady=(4, 12))
-        self.tabs.add("Download")
+        self.tabs.add("Buscar")
+        self.tabs.add("Download direto")
         self.tabs.add("Histórico")
         self.tabs.add("Log")
 
@@ -72,7 +76,7 @@ class MainWindow(ctk.CTk):
         self.log_tab.pack(fill="both", expand=True, padx=6, pady=6)
 
         self.download_tab = DownloadTab(
-            self.tabs.tab("Download"),
+            self.tabs.tab("Download direto"),
             settings=self.user_settings,
             runner=self.runner,
             on_log=self._handle_log,
@@ -80,12 +84,22 @@ class MainWindow(ctk.CTk):
         )
         self.download_tab.pack(fill="both", expand=True, padx=12, pady=12)
 
+        self.search_tab = SearchTab(
+            self.tabs.tab("Buscar"),
+            client=self.jlc_client,
+            on_download=self._download_from_search,
+            on_log=self._handle_log,
+        )
+        self.search_tab.pack(fill="both", expand=True, padx=12, pady=12)
+
         self.history_tab = HistoryTab(
             self.tabs.tab("Histórico"),
             history=self.history,
             on_redownload=self._redownload_from_history,
         )
         self.history_tab.pack(fill="both", expand=True, padx=12, pady=12)
+
+        self.tabs.set("Buscar")
 
         ctk.CTkLabel(
             self,
@@ -111,8 +125,12 @@ class MainWindow(ctk.CTk):
             log.warning("Falha ao salvar histórico: %s", exc)
         self.history_tab.refresh()
 
+    def _download_from_search(self, lcsc_id: str) -> None:
+        self.tabs.set("Download direto")
+        self.download_tab.trigger_download(lcsc_id, None)
+
     def _redownload_from_history(self, entry: HistoryEntry) -> None:
-        self.tabs.set("Download")
+        self.tabs.set("Download direto")
         self.download_tab.trigger_download(entry.lcsc_id, entry.output_dir)
 
     def _on_close(self) -> None:

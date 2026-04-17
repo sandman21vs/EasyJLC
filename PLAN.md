@@ -145,6 +145,11 @@ EasyJLC/
 - [ ] AppImage (Linux) via `linuxdeploy` ou manter binário onefile.
 - [ ] Smoke test em VM Windows.
 
+### UI Polish — backlog (feedback do usuário após Sprint 2)
+- [ ] **Pasta default pré-selecionada** na aba Download (ex.: primeira recente, `~/KiCad/lib`, ou última usada no histórico com sucesso). Hoje o campo abre vazio.
+- [ ] **Seletor de pasta moderno**: o `tkinter.filedialog` nativo tem visual antigo no Linux. Opções: (a) empacotar/usar `zenity`/`kdialog` quando disponíveis; (b) criar um file picker custom em CustomTkinter; (c) usar `tkfilebrowser` (terceiros). Decidir na Sprint de polish.
+- [ ] Revisar espaçamento, alinhamento e cores dos botões/chips quando a Sprint 3 estiver fechada.
+
 ### Pós-MVP (v1.1+)
 - [ ] BOM loader: importar `.csv` do KiCad e baixar todos os símbolos/footprints em lote.
 - [ ] Atalho "Criar símbolo alternativo" (picker de BOM equivalentes JLC Basic).

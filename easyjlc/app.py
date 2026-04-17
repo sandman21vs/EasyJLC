@@ -8,7 +8,7 @@ from easyjlc import __version__
 from easyjlc import history as history_module
 from easyjlc import settings as settings_module
 from easyjlc.config import setup_logging
-from easyjlc.core import EasyEdaRunner
+from easyjlc.core import EasyEdaRunner, JlcClient
 from easyjlc.ui import MainWindow
 
 log = logging.getLogger("easyjlc.app")
@@ -21,8 +21,9 @@ def main() -> int:
     user_settings = settings_module.load()
     history = history_module.load()
     runner = EasyEdaRunner()
+    jlc_client = JlcClient()
 
-    app = MainWindow(user_settings, history, runner)
+    app = MainWindow(user_settings, history, runner, jlc_client=jlc_client)
     app.mainloop()
     return 0
 
