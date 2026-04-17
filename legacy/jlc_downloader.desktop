@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=JLC Downloader
+Comment=Abre o downloader easyeda2kicad
+Exec=/home/msi/SandKrux/run_jlc_downloader.sh
+Path=/home/msi/SandKrux
+Terminal=true
+StartupNotify=true
+Categories=Development;Electronics;

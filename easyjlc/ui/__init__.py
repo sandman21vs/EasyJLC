@@ -1,0 +1,1 @@
+"""Widgets e painéis CustomTkinter."""

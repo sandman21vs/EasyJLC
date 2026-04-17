@@ -1,0 +1,4 @@
+customtkinter>=5.2
+platformdirs>=4.2
+requests>=2.32
+Pillow>=10.3

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easyjlc"
+version = "0.1.0"
+description = "GUI cross-platform para baixar símbolos/footprints KiCad do LCSC/EasyEDA com busca, preview e preço JLCPCB."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "EasyJLC contributors" }]
+keywords = ["kicad", "jlcpcb", "lcsc", "easyeda", "pcb", "gui"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = [
+    "customtkinter>=5.2",
+    "platformdirs>=4.2",
+    "requests>=2.32",
+    "Pillow>=10.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+build = [
+    "pyinstaller>=6.6",
+]
+
+[project.scripts]
+easyjlc = "easyjlc.app:main"
+
+[project.urls]
+Homepage = "https://github.com/"
+Issues = "https://github.com/"
+
+[tool.setuptools.packages.find]
+include = ["easyjlc*"]
+exclude = ["tests*", "legacy*", "packaging*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
