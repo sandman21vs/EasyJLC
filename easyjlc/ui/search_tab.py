@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+from io import BytesIO
 from pathlib import Path
 from typing import Callable
 
 import customtkinter as ctk
+import requests
+from PIL import Image
 
 from easyjlc.config import cache_dir
 from easyjlc.core import (
@@ -51,9 +54,11 @@ class SearchTab(ctk.CTkFrame):
         self._selected: Component | None = None
         self._worker: threading.Thread | None = None
         self._preview_worker: threading.Thread | None = None
+        self._image_worker: threading.Thread | None = None
         self._current_page = 1
         self._total_pages = 1
         self._current_query = ""
+        self._image_token = 0
 
         self._build_ui()
         self.after(POLL_MS, self._poll_queue)
@@ -174,6 +179,12 @@ class SearchTab(ctk.CTkFrame):
                 elif kind == "preview_err":
                     lcsc_id, message = payload  # type: ignore[misc]
                     self._render_preview_error(str(lcsc_id), str(message))
+                elif kind == "image_ok":
+                    token, lcsc_id, data = payload  # type: ignore[misc]
+                    self._render_image(int(token), str(lcsc_id), data)  # type: ignore[arg-type]
+                elif kind == "image_err":
+                    token, lcsc_id = payload  # type: ignore[misc]
+                    self._render_image_error(int(token), str(lcsc_id))
         except queue.Empty:
             pass
         self.after(POLL_MS, self._poll_queue)
@@ -275,6 +286,7 @@ class SearchTab(ctk.CTkFrame):
     def _select(self, comp: Component) -> None:
         self._selected = comp
         self.detail.show(comp)
+        self._start_image_load(comp)
 
     def _prev_page(self) -> None:
         if self._current_page > 1:
@@ -307,7 +319,7 @@ class SearchTab(ctk.CTkFrame):
             return
 
         existing = find_kicad_artifacts(preview_dir)
-        if existing.has_any:
+        if existing.has_all:
             self._msg_queue.put(("preview_ok", (lcsc_id, existing)))
             return
 
@@ -345,6 +357,51 @@ class SearchTab(ctk.CTkFrame):
         self.detail.clear_preview(f"Preview falhou: {message}")
         self.on_log(f"[preview {lcsc_id}] {message}")
 
+    def _start_image_load(self, comp: Component) -> None:
+        self._image_token += 1
+        token = self._image_token
+        if not comp.image_url:
+            self.detail.clear_image("Imagem JLC indisponível.")
+            return
+
+        self.detail.set_image_loading()
+        self._image_worker = threading.Thread(
+            target=self._worker_image, args=(token, comp.lcsc_id, comp.image_url), daemon=True
+        )
+        self._image_worker.start()
+
+    def _worker_image(self, token: int, lcsc_id: str, url: str) -> None:
+        try:
+            resp = requests.get(url, timeout=12)
+            resp.raise_for_status()
+        except requests.RequestException:
+            self._msg_queue.put(("image_err", (token, lcsc_id)))
+            return
+        self._msg_queue.put(("image_ok", (token, lcsc_id, resp.content)))
+
+    def _render_image(self, token: int, lcsc_id: str, data: bytes) -> None:
+        if (
+            token != self._image_token
+            or self._selected is None
+            or self._selected.lcsc_id != lcsc_id
+        ):
+            return
+        try:
+            image = Image.open(BytesIO(data))
+        except OSError:
+            self.detail.clear_image("Imagem JLC inválida.")
+            return
+        self.detail.show_image(image)
+
+    def _render_image_error(self, token: int, lcsc_id: str) -> None:
+        if (
+            token != self._image_token
+            or self._selected is None
+            or self._selected.lcsc_id != lcsc_id
+        ):
+            return
+        self.detail.clear_image("Imagem JLC não carregou.")
+
     def _set_searching(self, running: bool) -> None:
         state = "disabled" if running else "normal"
         self.search_btn.configure(
@@ -366,8 +423,9 @@ class DetailPanel(ctk.CTkFrame):
         self._component: Component | None = None
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=2)
-        self.grid_rowconfigure(3, weight=3)
+        self.grid_rowconfigure(3, weight=2)
+        self.grid_rowconfigure(4, weight=3)
+        self._image_ref: ctk.CTkImage | None = None
 
         self.title_lbl = ctk.CTkLabel(
             self,
@@ -383,15 +441,25 @@ class DetailPanel(ctk.CTkFrame):
         )
         self.sub_lbl.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
+        self.image_label = ctk.CTkLabel(
+            self,
+            text="Imagem JLC",
+            height=92,
+            fg_color="#171717",
+            text_color="gray70",
+            corner_radius=8,
+        )
+        self.image_label.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+
         self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll.grid(row=2, column=0, sticky="nsew")
+        self.scroll.grid(row=3, column=0, sticky="nsew")
         self.scroll.grid_columnconfigure(0, weight=1)
 
         self.preview_panel = PreviewPanel(self)
-        self.preview_panel.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
+        self.preview_panel.grid(row=4, column=0, sticky="nsew", pady=(8, 0))
 
         self.action_bar = ctk.CTkFrame(self, fg_color="transparent")
-        self.action_bar.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+        self.action_bar.grid(row=5, column=0, sticky="ew", pady=(8, 0))
         self.action_bar.grid_columnconfigure((0, 1), weight=1)
 
         self.preview_btn = ctk.CTkButton(
@@ -544,6 +612,19 @@ class DetailPanel(ctk.CTkFrame):
 
     def clear_preview(self, message: str) -> None:
         self.preview_panel.clear(message)
+
+    def set_image_loading(self) -> None:
+        self._image_ref = None
+        self.image_label.configure(image=None, text="Carregando imagem JLC...")
+
+    def show_image(self, image: Image.Image) -> None:
+        image.thumbnail((220, 90), Image.Resampling.LANCZOS)
+        self._image_ref = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
+        self.image_label.configure(image=self._image_ref, text="")
+
+    def clear_image(self, message: str) -> None:
+        self._image_ref = None
+        self.image_label.configure(image=None, text=message)
 
 
 def _preview_dir(lcsc_id: str) -> Path:

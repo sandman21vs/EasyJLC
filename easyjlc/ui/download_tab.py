@@ -47,6 +47,7 @@ class DownloadTab(ctk.CTkFrame):
         self._msg_queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
         self._worker: threading.Thread | None = None
         self._download_started_at: float | None = None
+        self._last_preview_lcsc_id = ""
 
         self._build_ui()
         self.after(self.POLL_MS, self._poll_queue)
@@ -67,6 +68,7 @@ class DownloadTab(ctk.CTkFrame):
         self.lcsc_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(4, 2))
         self.lcsc_entry.bind("<Return>", lambda _e: self._start_download())
         bind_select_all(self.lcsc_entry)
+        self.lcsc_var.trace_add("write", self._on_lcsc_changed)
 
         ctk.CTkLabel(self, text="Pasta de saída", anchor="w").grid(
             row=1, column=0, sticky="w", padx=(0, 10), pady=(10, 2)
@@ -242,7 +244,10 @@ class DownloadTab(ctk.CTkFrame):
                     output_dir,
                     changed_since=(since - 1.0) if since is not None else None,
                 )
+                if not artifacts.has_all:
+                    artifacts = find_kicad_artifacts(output_dir)
                 warnings = self.preview_panel.show_artifacts(artifacts)
+                self._last_preview_lcsc_id = lcsc_id
                 for warning in warnings:
                     self.on_log(f"[preview] {warning}")
             else:
@@ -262,3 +267,10 @@ class DownloadTab(ctk.CTkFrame):
         )
         self.lcsc_entry.configure(state=state)
         self.output_entry.configure(state=state)
+
+    def _on_lcsc_changed(self, *_args) -> None:
+        lcsc_id = self.lcsc_var.get().strip()
+        if lcsc_id == self._last_preview_lcsc_id:
+            return
+        self._last_preview_lcsc_id = ""
+        self.preview_panel.clear("Preview: baixe este componente para atualizar.")

@@ -15,6 +15,10 @@ class KiCadArtifacts:
     def has_any(self) -> bool:
         return self.symbol is not None or self.footprint is not None
 
+    @property
+    def has_all(self) -> bool:
+        return self.symbol is not None and self.footprint is not None
+
 
 def find_kicad_artifacts(
     root: str | Path,

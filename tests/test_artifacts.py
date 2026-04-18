@@ -26,6 +26,7 @@ def test_find_kicad_artifacts_returns_newest_files(tmp_path: Path):
     assert artifacts.symbol == new_sym
     assert artifacts.footprint == new_mod
     assert artifacts.has_any is True
+    assert artifacts.has_all is True
 
 
 def test_find_kicad_artifacts_filters_by_mtime(tmp_path: Path):
@@ -38,6 +39,7 @@ def test_find_kicad_artifacts_filters_by_mtime(tmp_path: Path):
     assert artifacts.symbol is None
     assert artifacts.footprint is None
     assert artifacts.has_any is False
+    assert artifacts.has_all is False
 
 
 def test_find_kicad_artifacts_missing_root():
