@@ -33,10 +33,17 @@ class DiskCache:
         return self.dir / f"{digest}.json"
 
     def get(self, key: str) -> Any | None:
+        return self._get(key, respect_ttl=True)
+
+    def get_stale(self, key: str) -> Any | None:
+        """Retorna cache mesmo expirado; útil como fallback quando a API falha."""
+        return self._get(key, respect_ttl=False)
+
+    def _get(self, key: str, respect_ttl: bool) -> Any | None:
         path = self._path(key)
         if not path.exists():
             return None
-        if self.ttl_seconds > 0:
+        if respect_ttl and self.ttl_seconds > 0:
             age = time.time() - path.stat().st_mtime
             if age > self.ttl_seconds:
                 return None

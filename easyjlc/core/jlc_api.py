@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 import requests
 
+from easyjlc.config import cache_dir
 from easyjlc.core.cache import DiskCache
 from easyjlc.core.models import Component, SearchResult
 
@@ -80,14 +82,14 @@ class JlcClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as exc:
-            fallback = _fallback_exact_result(query, page, page_size, f"Falha de rede: {exc}")
+            fallback = self._fallback_result(query, page, page_size, cache_key, f"Falha de rede: {exc}")
             if fallback is not None:
                 return fallback
             raise JlcApiError(f"Falha de rede: {exc}") from exc
 
         if resp.status_code != 200:
-            fallback = _fallback_exact_result(
-                query, page, page_size, f"HTTP {resp.status_code} da JLCPCB"
+            fallback = self._fallback_result(
+                query, page, page_size, cache_key, f"HTTP {resp.status_code} da JLCPCB"
             )
             if fallback is not None:
                 return fallback
@@ -100,8 +102,8 @@ class JlcClient:
 
         if data.get("code") != 200:
             msg = data.get("message") or "erro desconhecido"
-            fallback = _fallback_exact_result(
-                query, page, page_size, f"JLCPCB recusou a busca: {msg}"
+            fallback = self._fallback_result(
+                query, page, page_size, cache_key, f"JLCPCB recusou a busca: {msg}"
             )
             if fallback is not None:
                 return fallback
@@ -126,6 +128,30 @@ class JlcClient:
                 return item
         return None
 
+    def _fallback_result(
+        self,
+        query: str,
+        page: int,
+        page_size: int,
+        cache_key: str,
+        reason: str,
+    ) -> SearchResult | None:
+        exact = _fallback_exact_result(query, page, page_size, reason)
+        if exact is not None:
+            return exact
+
+        cached = self.cache.get_stale(cache_key)
+        if cached is not None:
+            result = SearchResult.from_api(cached, page, page_size)
+            result.fallback_reason = f"{reason}; exibindo cache expirado"
+            return result
+
+        local = _fallback_local_previews(query, page, page_size, reason)
+        if local is not None:
+            return local
+
+        return None
+
 
 def _fallback_exact_result(
     query: str,
@@ -143,3 +169,82 @@ def _fallback_exact_result(
         total=1,
         fallback_reason=reason,
     )
+
+
+def _fallback_local_previews(
+    query: str,
+    page: int,
+    page_size: int,
+    reason: str,
+) -> SearchResult | None:
+    if page != 1:
+        return None
+
+    term = query.strip().upper()
+    if not term:
+        return None
+
+    items: list[Component] = []
+    previews_root = cache_dir() / "previews"
+    if not previews_root.exists():
+        return None
+
+    for part_dir in sorted(previews_root.iterdir()):
+        if not part_dir.is_dir():
+            continue
+        component = _component_from_preview_dir(part_dir)
+        if component is None:
+            continue
+        haystack = " ".join(
+            [
+                component.lcsc_id,
+                component.mpn,
+                component.manufacturer,
+                component.package,
+                component.description,
+            ]
+        ).upper()
+        if term in haystack:
+            items.append(component)
+
+    if not items:
+        return None
+
+    return SearchResult(
+        items=items[:page_size],
+        page=page,
+        page_size=page_size,
+        total=len(items),
+        fallback_reason=f"{reason}; exibindo previews locais",
+    )
+
+
+def _component_from_preview_dir(part_dir: Path) -> Component | None:
+    symbol_files = sorted(part_dir.glob("*.kicad_sym"))
+    if not symbol_files:
+        return None
+    text = symbol_files[0].read_text(encoding="utf-8", errors="ignore")
+    lcsc_id = _property_value(text, "LCSC Part") or part_dir.name.upper()
+    footprint = _property_value(text, "Footprint") or ""
+    return Component(
+        lcsc_id=lcsc_id,
+        mpn=_property_value(text, "MPN") or _property_value(text, "Value") or "",
+        manufacturer=_property_value(text, "Manufacturer") or "",
+        package=footprint.split(":")[-1] if footprint else "",
+        description="Resultado local de preview em cache.",
+        category="",
+        library_type="",
+        stock=0,
+        min_purchase=1,
+    )
+
+
+def _property_value(text: str, name: str) -> str | None:
+    pattern = re.compile(
+        r'\(property\s+"'
+        + re.escape(name)
+        + r'"\s+"([^"]+)"',
+        re.IGNORECASE,
+    )
+    match = pattern.search(text)
+    return match.group(1).strip() if match else None

@@ -24,6 +24,7 @@ def test_ttl_expires(tmp_path: Path):
     old = time.time() - 10
     os.utime(p, (old, old))
     assert c.get("k") is None
+    assert c.get_stale("k") == [1, 2, 3]
 
 
 def test_clear_removes_entries(tmp_path: Path):

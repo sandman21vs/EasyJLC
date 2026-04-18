@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from easyjlc.core.cache import DiskCache
+from easyjlc.core import jlc_api
 from easyjlc.core.jlc_api import JlcApiError, JlcClient
 
 
@@ -96,6 +97,50 @@ def test_search_http_error_exact_lcsc_falls_back(tmp_path: Path):
     assert result.fallback_reason == "HTTP 403 da JLCPCB"
     assert result.items[0].lcsc_id == "C129733"
     assert "Resultado local" in result.items[0].description
+
+
+def test_search_http_error_uses_stale_cache_for_text(tmp_path: Path):
+    session = MagicMock()
+    session.post.return_value = _fake_response(200, SEARCH_OK)
+    client = _make_client(tmp_path, session)
+    client.search("LM358")
+
+    session.post.return_value = _fake_response(403, {})
+    result = client.search("LM358", use_cache=False)
+
+    assert result.items[0].lcsc_id == "C5213"
+    assert result.fallback_reason is not None
+    assert "cache expirado" in result.fallback_reason
+
+
+def test_search_http_error_uses_local_preview_for_text(tmp_path: Path, monkeypatch):
+    previews = tmp_path / "previews" / "C82899"
+    previews.mkdir(parents=True)
+    (previews / "easyeda2kicad.kicad_sym").write_text(
+        """
+        (kicad_symbol_lib
+          (symbol "ESP32-WROOM-32"
+            (property "Value" "ESP32-WROOM-32")
+            (property "MPN" "ESP32-WROOM-32-N4")
+            (property "Manufacturer" "Espressif")
+            (property "Footprint" "easyeda2kicad:WIFIM-SMD_ESP32-WROOM-32-N4")
+            (property "LCSC Part" "C82899")))
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(jlc_api, "cache_dir", lambda: tmp_path)
+
+    session = MagicMock()
+    session.post.return_value = _fake_response(403, {})
+    client = _make_client(tmp_path, session)
+
+    result = client.search("esp32")
+
+    assert result.items[0].lcsc_id == "C82899"
+    assert result.items[0].mpn == "ESP32-WROOM-32-N4"
+    assert result.items[0].package == "WIFIM-SMD_ESP32-WROOM-32-N4"
+    assert result.fallback_reason is not None
+    assert "previews locais" in result.fallback_reason
 
 
 def test_search_api_error_code(tmp_path: Path):
