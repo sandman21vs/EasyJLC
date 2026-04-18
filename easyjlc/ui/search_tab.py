@@ -60,6 +60,7 @@ class SearchTab(ctk.CTkFrame):
         self._total_pages = 1
         self._current_query = ""
         self._image_token = 0
+        self._search_token = 0
 
         self._build_ui()
         self.after(POLL_MS, self._poll_queue)
@@ -138,43 +139,47 @@ class SearchTab(ctk.CTkFrame):
     # ---------- Ações ----------
 
     def _start_search(self, page: int = 1) -> None:
-        if self._worker and self._worker.is_alive():
-            return
-
         query = self.query_var.get().strip()
         if not query:
             self.query_entry.focus_set()
             return
 
-        self.on_log(f'[busca] pesquisando "{query}" página {page}')
+        if self._worker and self._worker.is_alive():
+            self.on_log("[busca] busca anterior ainda em andamento; iniciando uma nova e ignorando a anterior")
+
+        self._search_token += 1
+        token = self._search_token
+        self.on_log(f'[busca] pesquisando "{query}" página {page} token={token}')
         self._current_query = query
         self._current_page = page
         self._set_searching(True)
         self.results_header.configure(text=f"Buscando “{query}”...")
 
         self._worker = threading.Thread(
-            target=self._worker_search, args=(query, page), daemon=True
+            target=self._worker_search, args=(token, query, page), daemon=True
         )
         self._worker.start()
 
-    def _worker_search(self, query: str, page: int) -> None:
+    def _worker_search(self, token: int, query: str, page: int) -> None:
         try:
             result = self.client.search(query, page=page, page_size=PAGE_SIZE)
-            self._msg_queue.put(("ok", result))
+            self._msg_queue.put(("ok", (token, result)))
         except JlcApiError as exc:
-            self._msg_queue.put(("err", str(exc)))
+            self._msg_queue.put(("err", (token, str(exc))))
         except Exception as exc:  # pragma: no cover — defesa extra
             log.exception("Erro inesperado na busca")
-            self._msg_queue.put(("err", f"Erro inesperado: {exc}"))
+            self._msg_queue.put(("err", (token, f"Erro inesperado: {exc}")))
 
     def _poll_queue(self) -> None:
         try:
             while True:
                 kind, payload = self._msg_queue.get_nowait()
                 if kind == "ok":
-                    self._render_results(payload)  # type: ignore[arg-type]
+                    token, result = payload  # type: ignore[misc]
+                    self._render_results(int(token), result)  # type: ignore[arg-type]
                 elif kind == "err":
-                    self._render_error(str(payload))
+                    token, message = payload  # type: ignore[misc]
+                    self._render_error(int(token), str(message))
                 elif kind == "preview_ok":
                     lcsc_id, artifacts = payload  # type: ignore[misc]
                     self._render_preview(str(lcsc_id), artifacts)
@@ -191,7 +196,10 @@ class SearchTab(ctk.CTkFrame):
             pass
         self.after(POLL_MS, self._poll_queue)
 
-    def _render_results(self, result: SearchResult) -> None:
+    def _render_results(self, token: int, result: SearchResult) -> None:
+        if token != self._search_token:
+            self.on_log(f"[busca] ignorando resultado antigo token={token}")
+            return
         self._set_searching(False)
         self._current_components = result.items
         self._total_pages = result.total_pages
@@ -234,7 +242,10 @@ class SearchTab(ctk.CTkFrame):
         if result.items:
             self._select(result.items[0])
 
-    def _render_error(self, message: str) -> None:
+    def _render_error(self, token: int, message: str) -> None:
+        if token != self._search_token:
+            self.on_log(f"[busca] ignorando erro antigo token={token}: {message}")
+            return
         self._set_searching(False)
         self.results_header.configure(text=f"Erro: {message}")
         self.on_log(f"[busca] {message}")
@@ -454,11 +465,10 @@ class SearchTab(ctk.CTkFrame):
         self.detail.clear_image("Imagem JLC não carregou.")
 
     def _set_searching(self, running: bool) -> None:
-        state = "disabled" if running else "normal"
         self.search_btn.configure(
-            state=state, text="Buscando..." if running else "Buscar"
+            state="normal", text="Buscando..." if running else "Buscar"
         )
-        self.query_entry.configure(state=state)
+        self.query_entry.configure(state="normal")
 
 
 class DetailPanel(ctk.CTkFrame):
