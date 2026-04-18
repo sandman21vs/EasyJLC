@@ -41,13 +41,13 @@ class PreviewPanel(ctk.CTkFrame):
         self.symbol_canvas.clear()
         self.footprint_canvas.clear()
 
-    def show_artifacts(self, artifacts: KiCadArtifacts) -> list[str]:
+    def show_artifacts(self, artifacts: KiCadArtifacts, lcsc_id: str | None = None) -> list[str]:
         warnings: list[str] = []
         loaded: list[str] = []
 
         if artifacts.symbol is not None:
             try:
-                symbol = parse_symbol_file(artifacts.symbol)
+                symbol = parse_symbol_file(artifacts.symbol, lcsc_id=lcsc_id)
                 self.symbol_canvas.show(symbol)
                 loaded.append(_short_path(artifacts.symbol))
                 warnings.append(

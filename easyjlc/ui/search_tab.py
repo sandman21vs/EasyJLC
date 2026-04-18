@@ -374,7 +374,7 @@ class SearchTab(ctk.CTkFrame):
         if self._selected is None or self._selected.lcsc_id != lcsc_id:
             return
         self.detail.set_preview_running(False)
-        warnings = self.detail.show_preview(artifacts)
+        warnings = self.detail.show_preview(artifacts, lcsc_id=lcsc_id)
         for warning in warnings:
             self.on_log(f"[preview {lcsc_id}] {warning}")
 
@@ -647,8 +647,8 @@ class DetailPanel(ctk.CTkFrame):
         if running:
             self.preview_panel.clear("Preview carregando arquivos KiCad...")
 
-    def show_preview(self, artifacts) -> list[str]:
-        return self.preview_panel.show_artifacts(artifacts)
+    def show_preview(self, artifacts, lcsc_id: str | None = None) -> list[str]:
+        return self.preview_panel.show_artifacts(artifacts, lcsc_id=lcsc_id)
 
     def clear_preview(self, message: str) -> None:
         self.preview_panel.clear(message)

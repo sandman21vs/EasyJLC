@@ -261,7 +261,7 @@ class DownloadTab(ctk.CTkFrame):
                         f"[preview] fallback na pasta inteira filtrado por {lcsc_id}: "
                         f"symbol={artifacts.symbol or '-'} footprint={artifacts.footprint or '-'}"
                     )
-                warnings = self.preview_panel.show_artifacts(artifacts)
+                warnings = self.preview_panel.show_artifacts(artifacts, lcsc_id=lcsc_id)
                 self._last_preview_lcsc_id = lcsc_id
                 for warning in warnings:
                     self.on_log(f"[preview] {warning}")

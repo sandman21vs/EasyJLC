@@ -86,6 +86,22 @@ def test_parse_symbol_can_select_by_name():
     assert symbol.pins[0].number == "2"
 
 
+def test_parse_symbol_can_select_by_lcsc_property():
+    text = """
+    (kicad_symbol_lib
+      (symbol "A"
+        (property "LCSC Part" "C1")
+        (pin input line (at 0 0 0) (length 1) (name "A") (number "1")))
+      (symbol "B"
+        (property "LCSC Part" "C2")
+        (pin input line (at 2 0 0) (length 1) (name "B") (number "2")))
+    )
+    """
+    symbol = parse_symbol(parse_sexpr(text), lcsc_id="C2")
+    assert symbol.name == "B"
+    assert symbol.pins[0].number == "2"
+
+
 def test_parse_symbol_file(tmp_path: Path):
     path = tmp_path / "part.kicad_sym"
     path.write_text(SYMBOL_TEXT, encoding="utf-8")
@@ -136,3 +152,11 @@ def test_parse_errors_on_malformed_input():
 def test_parse_errors_when_symbol_is_missing():
     with pytest.raises(KiCadParseError):
         parse_symbol(parse_sexpr('(kicad_symbol_lib (symbol "A"))'), symbol_name="B")
+
+
+def test_parse_errors_when_lcsc_symbol_is_missing():
+    with pytest.raises(KiCadParseError):
+        parse_symbol(
+            parse_sexpr('(kicad_symbol_lib (symbol "A" (property "LCSC Part" "C1")))'),
+            lcsc_id="C2",
+        )

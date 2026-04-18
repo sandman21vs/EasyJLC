@@ -117,9 +117,13 @@ def parse_sexpr(text: str) -> Sexp:
     return root
 
 
-def parse_symbol_file(path: str | Path, symbol_name: str | None = None) -> SymbolPreview:
+def parse_symbol_file(
+    path: str | Path,
+    symbol_name: str | None = None,
+    lcsc_id: str | None = None,
+) -> SymbolPreview:
     root = parse_sexpr(Path(path).read_text(encoding="utf-8"))
-    return parse_symbol(root, symbol_name=symbol_name)
+    return parse_symbol(root, symbol_name=symbol_name, lcsc_id=lcsc_id)
 
 
 def parse_footprint_file(path: str | Path) -> FootprintPreview:
@@ -127,10 +131,16 @@ def parse_footprint_file(path: str | Path) -> FootprintPreview:
     return parse_footprint(root)
 
 
-def parse_symbol(root: Sexp, symbol_name: str | None = None) -> SymbolPreview:
-    node = _find_symbol_node(root, symbol_name)
+def parse_symbol(
+    root: Sexp,
+    symbol_name: str | None = None,
+    lcsc_id: str | None = None,
+) -> SymbolPreview:
+    node = _find_symbol_node(root, symbol_name, lcsc_id)
     if node is None:
         target = f' "{symbol_name}"' if symbol_name else ""
+        if lcsc_id:
+            target = f' com LCSC "{lcsc_id}"'
         raise KiCadParseError(f"Nenhum símbolo{target} encontrado.")
 
     name = _atom(node, 1) or ""
@@ -230,15 +240,42 @@ def _tokens(text: str):
         yield text[start:i]
 
 
-def _find_symbol_node(root: Sexp, symbol_name: str | None) -> list[Sexp] | None:
+def _find_symbol_node(
+    root: Sexp,
+    symbol_name: str | None,
+    lcsc_id: str | None,
+) -> list[Sexp] | None:
     if not _is_list(root):
         return None
-    if _head(root) == "symbol" and (symbol_name is None or _atom(root, 1) == symbol_name):
+    if _head(root) == "symbol" and _symbol_matches(root, symbol_name, lcsc_id):
         return root
     for child in _children(root):
-        found = _find_symbol_node(child, symbol_name)
+        found = _find_symbol_node(child, symbol_name, lcsc_id)
         if found is not None:
             return found
+    return None
+
+
+def _symbol_matches(
+    node: list[Sexp],
+    symbol_name: str | None,
+    lcsc_id: str | None,
+) -> bool:
+    if symbol_name is not None and _atom(node, 1) != symbol_name:
+        return False
+    if lcsc_id is not None and _symbol_lcsc_id(node) != lcsc_id.strip().upper():
+        return False
+    return True
+
+
+def _symbol_lcsc_id(node: list[Sexp]) -> str | None:
+    for child in _children(node):
+        if _head(child) != "property":
+            continue
+        key = (_atom(child, 1) or "").strip().lower()
+        value = (_atom(child, 2) or "").strip().upper()
+        if key == "lcsc part" and value:
+            return value
     return None
 
 
