@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import re
 import threading
 from io import BytesIO
 from pathlib import Path
@@ -31,6 +32,7 @@ log = logging.getLogger("easyjlc.search_tab")
 
 POLL_MS = 80
 PAGE_SIZE = 20
+LCSC_ID_RE = re.compile(r"^C\d+$", re.IGNORECASE)
 
 
 class SearchTab(ctk.CTkFrame):
@@ -61,6 +63,8 @@ class SearchTab(ctk.CTkFrame):
         self._current_query = ""
         self._image_token = 0
         self._search_token = 0
+        self._search_running = False
+        self._pending_search: tuple[str, int] | None = None
 
         self._build_ui()
         self.after(POLL_MS, self._poll_queue)
@@ -143,6 +147,13 @@ class SearchTab(ctk.CTkFrame):
         if not query:
             self.query_entry.focus_set()
             return
+        if LCSC_ID_RE.match(query) and page != 1:
+            self.on_log(f'[busca] "{query}" é LCSC ID exato; forçando página 1')
+            page = 1
+
+        if self._search_running and self._pending_search == (query, page):
+            self.on_log(f'[busca] ignorando busca duplicada em andamento "{query}" página {page}')
+            return
 
         if self._worker and self._worker.is_alive():
             self.on_log("[busca] busca anterior ainda em andamento; iniciando uma nova e ignorando a anterior")
@@ -152,6 +163,7 @@ class SearchTab(ctk.CTkFrame):
         self.on_log(f'[busca] pesquisando "{query}" página {page} token={token}')
         self._current_query = query
         self._current_page = page
+        self._pending_search = (query, page)
         self._set_searching(True)
         self.results_header.configure(text=f"Buscando “{query}”...")
 
@@ -200,6 +212,7 @@ class SearchTab(ctk.CTkFrame):
         if token != self._search_token:
             self.on_log(f"[busca] ignorando resultado antigo token={token}")
             return
+        self._pending_search = None
         self._set_searching(False)
         self._current_components = result.items
         self._total_pages = result.total_pages
@@ -246,6 +259,7 @@ class SearchTab(ctk.CTkFrame):
         if token != self._search_token:
             self.on_log(f"[busca] ignorando erro antigo token={token}: {message}")
             return
+        self._pending_search = None
         self._set_searching(False)
         self.results_header.configure(text=f"Erro: {message}")
         self.on_log(f"[busca] {message}")
@@ -322,10 +336,19 @@ class SearchTab(ctk.CTkFrame):
         self._start_image_load(comp)
 
     def _prev_page(self) -> None:
+        if self._search_running:
+            self.on_log("[busca] paginação ignorada: busca em andamento")
+            return
         if self._current_page > 1:
             self._start_search(page=self._current_page - 1)
 
     def _next_page(self) -> None:
+        if self._search_running:
+            self.on_log("[busca] paginação ignorada: busca em andamento")
+            return
+        if LCSC_ID_RE.match(self.query_var.get().strip()):
+            self.on_log("[busca] paginação ignorada: LCSC ID exato não tem página 2")
+            return
         if self._current_page < self._total_pages:
             self._start_search(page=self._current_page + 1)
 
@@ -465,10 +488,14 @@ class SearchTab(ctk.CTkFrame):
         self.detail.clear_image("Imagem JLC não carregou.")
 
     def _set_searching(self, running: bool) -> None:
+        self._search_running = running
         self.search_btn.configure(
             state="normal", text="Buscando..." if running else "Buscar"
         )
         self.query_entry.configure(state="normal")
+        if running:
+            self.prev_btn.configure(state="disabled")
+            self.next_btn.configure(state="disabled")
 
 
 class DetailPanel(ctk.CTkFrame):
