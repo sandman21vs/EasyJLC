@@ -1,5 +1,7 @@
 # Bug: aba Buscar congela após primeira pesquisa/seleção
 
+> **Status: corrigido** na Sprint 4.5. Ver `PLAN.md` seção "Sprint 4.5 — Estabilizar busca" e plugin de referência em `legacy/Import-LIB-KiCad-Plugin/plugins/component_search.py`. `search_tab.py` foi refatorado no padrão do plugin (contador de request-id + checagem no callback, sem `trace_add`, sem watchdog, sem sessão HTTP compartilhada, timeout 15 s). Complementos: botão **Cancelar** enquanto há busca em voo, dedup de fetch de imagem por URL + cache de bytes. Testes 60/60. Fazer o teste manual descrito em "Testes manuais recomendados" para validar em UI real.
+
 ## Resumo
 
 A aba **Buscar** funciona na primeira pesquisa e na primeira seleção de componente, mas depois de selecionar outros componentes, carregar imagem/preview, baixar um componente ou tentar uma nova pesquisa, a UI entra em um estado inconsistente.

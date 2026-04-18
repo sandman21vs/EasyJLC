@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
+from easyjlc.i18n import t
+
 
 class LogTab(ctk.CTkFrame):
     def __init__(self, master) -> None:
@@ -19,7 +21,7 @@ class LogTab(ctk.CTkFrame):
         toolbar.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         toolbar.grid_columnconfigure(0, weight=1)
 
-        clear_btn = ctk.CTkButton(toolbar, text="Limpar", width=90, command=self.clear)
+        clear_btn = ctk.CTkButton(toolbar, text=t("Limpar"), width=90, command=self.clear)
         clear_btn.grid(row=0, column=1, sticky="e")
 
     def append(self, line: str) -> None:

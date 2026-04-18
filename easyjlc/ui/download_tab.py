@@ -12,8 +12,10 @@ from typing import Callable
 
 import customtkinter as ctk
 
+from easyjlc.config import default_output_dir
 from easyjlc.core import find_kicad_artifacts
 from easyjlc.core import EasyEdaError, EasyEdaRunner
+from easyjlc.i18n import t
 from easyjlc.settings import Settings
 from easyjlc.ui.bindings import bind_select_all
 from easyjlc.ui.preview_panel import PreviewPanel
@@ -58,31 +60,32 @@ class DownloadTab(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(5, weight=1)
 
-        ctk.CTkLabel(self, text="LCSC ID", anchor="w").grid(
+        ctk.CTkLabel(self, text=t("LCSC ID"), anchor="w").grid(
             row=0, column=0, sticky="w", padx=(0, 10), pady=(4, 2)
         )
         self.lcsc_var = ctk.StringVar()
         self.lcsc_entry = ctk.CTkEntry(
-            self, textvariable=self.lcsc_var, placeholder_text="ex: C2040"
+            self, textvariable=self.lcsc_var, placeholder_text=t("ex: C2040")
         )
         self.lcsc_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(4, 2))
         self.lcsc_entry.bind("<Return>", lambda _e: self._start_download())
         bind_select_all(self.lcsc_entry)
         self.lcsc_var.trace_add("write", self._on_lcsc_changed)
 
-        ctk.CTkLabel(self, text="Pasta de saída", anchor="w").grid(
+        ctk.CTkLabel(self, text=t("Pasta de saída"), anchor="w").grid(
             row=1, column=0, sticky="w", padx=(0, 10), pady=(10, 2)
         )
-        self.output_var = ctk.StringVar(value=self.settings.output_dir or "")
+        initial_output = self.settings.output_dir or str(default_output_dir())
+        self.output_var = ctk.StringVar(value=initial_output)
         self.output_entry = ctk.CTkEntry(
             self,
             textvariable=self.output_var,
-            placeholder_text="Deixe vazio para usar a pasta default do easyeda2kicad",
+            placeholder_text=t("Pasta sugerida: ~/Documents/EasyJLC"),
         )
         self.output_entry.grid(row=1, column=1, sticky="ew", pady=(10, 2))
         bind_select_all(self.output_entry)
 
-        ctk.CTkButton(self, text="Procurar...", width=110, command=self._browse).grid(
+        ctk.CTkButton(self, text=t("Procurar..."), width=110, command=self._browse).grid(
             row=1, column=2, sticky="e", padx=(8, 0), pady=(10, 2)
         )
 
@@ -92,14 +95,14 @@ class DownloadTab(ctk.CTkFrame):
 
         self.download_btn = ctk.CTkButton(
             self,
-            text="⬇  Baixar",
+            text=t("⬇  Baixar"),
             height=38,
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._start_download,
         )
         self.download_btn.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(18, 4))
 
-        self.status_var = ctk.StringVar(value="Pronto.")
+        self.status_var = ctk.StringVar(value=t("Pronto."))
         ctk.CTkLabel(
             self, textvariable=self.status_var, text_color="gray70", anchor="w"
         ).grid(row=4, column=0, columnspan=3, sticky="ew")
@@ -119,9 +122,9 @@ class DownloadTab(ctk.CTkFrame):
 
         ctk.CTkLabel(
             self.recent_frame,
-            text="Recentes:",
-            text_color="gray60",
-            font=ctk.CTkFont(size=11),
+            text=t("Recentes:"),
+            text_color=("gray25", "gray75"),
+            font=ctk.CTkFont(size=11, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=(0, 6))
 
         for idx, path in enumerate(recents):
@@ -129,18 +132,25 @@ class DownloadTab(ctk.CTkFrame):
             ctk.CTkButton(
                 self.recent_frame,
                 text=short,
-                height=22,
+                height=26,
                 width=1,
-                fg_color="transparent",
-                border_width=1,
-                font=ctk.CTkFont(size=10),
+                fg_color=("gray85", "gray25"),
+                hover_color=("gray75", "gray35"),
+                text_color=("gray10", "gray95"),
+                border_width=0,
+                corner_radius=6,
+                font=ctk.CTkFont(size=11),
                 command=lambda p=path: self.output_var.set(p),
-            ).grid(row=0, column=idx + 1, sticky="w", padx=2)
+            ).grid(row=0, column=idx + 1, sticky="w", padx=2, pady=2)
 
     def _browse(self) -> None:
-        initial = self.output_var.get() or self.settings.output_dir or str(Path.home())
+        initial = (
+            self.output_var.get()
+            or self.settings.output_dir
+            or str(default_output_dir())
+        )
         selected = filedialog.askdirectory(
-            title="Selecione a pasta de destino",
+            title=t("Selecione a pasta de destino"),
             initialdir=initial,
             mustexist=False,
         )
@@ -182,8 +192,8 @@ class DownloadTab(ctk.CTkFrame):
 
         self._set_running(True)
         self._download_started_at = time.time()
-        self.status_var.set(f"Baixando {lcsc_id}...")
-        self.preview_panel.clear("Preview aguardando o download terminar...")
+        self.status_var.set(t("Baixando {lcsc_id}...", lcsc_id=lcsc_id))
+        self.preview_panel.clear(t("Preview aguardando o download terminar..."))
 
         self._worker = threading.Thread(
             target=self._worker_entry,
@@ -240,7 +250,7 @@ class DownloadTab(ctk.CTkFrame):
             f"output={output_dir or '(default)'}, message={message or '-'}"
         )
         if success:
-            self.status_var.set(f"{lcsc_id} baixado.")
+            self.status_var.set(t("{lcsc_id} baixado.", lcsc_id=lcsc_id))
             if output_dir:
                 self.settings.output_dir = output_dir
                 self.settings.add_recent_output(output_dir)
@@ -267,18 +277,18 @@ class DownloadTab(ctk.CTkFrame):
                     self.on_log(f"[preview] {warning}")
             else:
                 self.preview_panel.clear(
-                    "Preview indisponível: escolha uma pasta de saída para localizar os arquivos."
+                    t("Preview indisponível: escolha uma pasta de saída para localizar os arquivos.")
                 )
         else:
-            self.status_var.set(f"{lcsc_id} falhou. {message}".strip())
-            self.preview_panel.clear("Preview indisponível: download falhou.")
+            self.status_var.set(t("{lcsc_id} falhou. {message}", lcsc_id=lcsc_id, message=message).strip())
+            self.preview_panel.clear(t("Preview indisponível: download falhou."))
         self.on_finished(lcsc_id, output_dir, success, message)
 
     def _set_running(self, running: bool) -> None:
         state = "disabled" if running else "normal"
         self.download_btn.configure(
             state=state,
-            text="⏳  Baixando..." if running else "⬇  Baixar",
+            text=t("⏳  Baixando...") if running else t("⬇  Baixar"),
         )
         self.lcsc_entry.configure(state=state)
         self.output_entry.configure(state=state)
@@ -289,4 +299,4 @@ class DownloadTab(ctk.CTkFrame):
             return
         self._last_preview_lcsc_id = ""
         self.on_log(f"[download] LCSC ID alterado para {lcsc_id or '(vazio)'}; limpando preview")
-        self.preview_panel.clear("Preview: baixe este componente para atualizar.")
+        self.preview_panel.clear(t("Preview: baixe este componente para atualizar."))

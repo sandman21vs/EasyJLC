@@ -8,6 +8,7 @@ import customtkinter as ctk
 
 from easyjlc.core.artifacts import KiCadArtifacts
 from easyjlc.core.kicad_parse import KiCadParseError, parse_footprint_file, parse_symbol_file
+from easyjlc.i18n import t
 from easyjlc.ui.footprint_canvas import FootprintCanvas
 from easyjlc.ui.preview_canvas import SymbolCanvas
 
@@ -20,7 +21,7 @@ class PreviewPanel(ctk.CTkFrame):
 
         self.status = ctk.CTkLabel(
             self,
-            text="Preview: baixe uma peça com pasta de saída definida.",
+            text=t("Preview: baixe uma peça com pasta de saída definida."),
             anchor="w",
             text_color="gray70",
             font=ctk.CTkFont(size=11),
@@ -58,10 +59,10 @@ class PreviewPanel(ctk.CTkFrame):
                     f"{len(symbol.polylines)} polylines)"
                 )
             except (OSError, KiCadParseError) as exc:
-                self.symbol_canvas.clear("Símbolo indisponível.")
+                self.symbol_canvas.clear(t("Símbolo indisponível."))
                 warnings.append(f"Símbolo: {exc}")
         else:
-            self.symbol_canvas.clear("Símbolo não encontrado.")
+            self.symbol_canvas.clear(t("Símbolo não encontrado."))
 
         if artifacts.footprint is not None:
             try:
@@ -74,17 +75,17 @@ class PreviewPanel(ctk.CTkFrame):
                     f"{len(footprint.pads)} pads)"
                 )
             except (OSError, KiCadParseError) as exc:
-                self.footprint_canvas.clear("Footprint indisponível.")
+                self.footprint_canvas.clear(t("Footprint indisponível."))
                 warnings.append(f"Footprint: {exc}")
         else:
-            self.footprint_canvas.clear("Footprint não encontrado.")
+            self.footprint_canvas.clear(t("Footprint não encontrado."))
 
         if loaded:
-            self.status.configure(text="Preview carregado: " + "  |  ".join(loaded))
+            self.status.configure(text=t("Preview carregado: ") + "  |  ".join(loaded))
         elif warnings:
-            self.status.configure(text="Preview não pôde ser carregado.")
+            self.status.configure(text=t("Preview não pôde ser carregado."))
         else:
-            self.status.configure(text="Preview não encontrou arquivos KiCad nessa pasta.")
+            self.status.configure(text=t("Preview não encontrou arquivos KiCad nessa pasta."))
 
         return warnings
 

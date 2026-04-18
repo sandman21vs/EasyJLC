@@ -44,22 +44,24 @@ class JlcClient:
     def __init__(
         self,
         cache: DiskCache | None = None,
-        timeout: float = 4.0,
+        timeout: float = 15.0,
         session: requests.Session | None = None,
     ) -> None:
         self.cache = cache if cache is not None else DiskCache("jlc_search", ttl_seconds=6 * 3600)
         self.timeout = timeout
-        self.session = session or requests.Session()
-        self.session.headers.update(DEFAULT_HEADERS)
+        # Injetado em testes; em produção fica None e cada chamada HTTP usa
+        # requests.post() direto, sem sessão compartilhada entre threads.
+        self._session = session
 
-    def reset_session(self) -> None:
-        """Reinicia a sessão HTTP usada pela busca."""
-        try:
-            self.session.close()
-        except Exception:
-            pass
-        self.session = requests.Session()
-        self.session.headers.update(DEFAULT_HEADERS)
+    def _post(self, url: str, payload: dict[str, Any]) -> requests.Response:
+        data = json.dumps(payload)
+        if self._session is not None:
+            return self._session.post(
+                url, data=data, headers=DEFAULT_HEADERS, timeout=self.timeout
+            )
+        return requests.post(
+            url, data=data, headers=DEFAULT_HEADERS, timeout=self.timeout
+        )
 
     def search(
         self,
@@ -85,11 +87,7 @@ class JlcClient:
         }
 
         try:
-            resp = self.session.post(
-                SEARCH_URL,
-                data=json.dumps(payload),
-                timeout=self.timeout,
-            )
+            resp = self._post(SEARCH_URL, payload)
         except requests.RequestException as exc:
             fallback = self._fallback_result(query, page, page_size, cache_key, f"Falha de rede: {exc}")
             if fallback is not None:

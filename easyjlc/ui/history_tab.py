@@ -10,6 +10,7 @@ from typing import Callable
 import customtkinter as ctk
 
 from easyjlc.history import History, HistoryEntry
+from easyjlc.i18n import t
 
 
 class HistoryTab(ctk.CTkFrame):
@@ -32,11 +33,11 @@ class HistoryTab(ctk.CTkFrame):
 
         ctk.CTkLabel(
             header,
-            text="Downloads recentes",
+            text=t("Downloads recentes"),
             font=ctk.CTkFont(size=14, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
 
-        ctk.CTkButton(header, text="Limpar tudo", width=110, command=self._clear).grid(
+        ctk.CTkButton(header, text=t("Limpar tudo"), width=110, command=self._clear).grid(
             row=0, column=1, sticky="e"
         )
 
@@ -46,7 +47,7 @@ class HistoryTab(ctk.CTkFrame):
 
         self.empty_label = ctk.CTkLabel(
             self.scroll,
-            text="Nenhum download ainda.",
+            text=t("Nenhum download ainda."),
             text_color="gray60",
         )
         self.refresh()
@@ -58,7 +59,7 @@ class HistoryTab(ctk.CTkFrame):
         if not self.history.entries:
             self.empty_label = ctk.CTkLabel(
                 self.scroll,
-                text="Nenhum download ainda.",
+                text=t("Nenhum download ainda."),
                 text_color="gray60",
             )
             self.empty_label.grid(row=0, column=0, pady=24)
@@ -91,7 +92,7 @@ class HistoryTab(ctk.CTkFrame):
         ).grid(row=0, column=1, padx=(0, 8), pady=8)
 
         when = entry.timestamp.replace("T", " ").split("+")[0]
-        where = entry.output_dir or "(pasta default)"
+        where = entry.output_dir or t("(pasta default)")
         details = ctk.CTkLabel(
             row,
             text=f"{when}  •  {where}",
@@ -105,18 +106,18 @@ class HistoryTab(ctk.CTkFrame):
         actions.grid(row=0, column=3, padx=(0, 8))
 
         ctk.CTkButton(
-            actions, text="Rebaixar", width=90,
+            actions, text=t("Rebaixar"), width=90,
             command=lambda e=entry: self.on_redownload(e),
         ).grid(row=0, column=0, padx=2)
 
         if entry.output_dir:
             ctk.CTkButton(
-                actions, text="Abrir pasta", width=100,
+                actions, text=t("Abrir pasta"), width=100,
                 command=lambda p=entry.output_dir: _open_folder(p),
             ).grid(row=0, column=1, padx=2)
 
         ctk.CTkButton(
-            actions, text="Copiar ID", width=90,
+            actions, text=t("Copiar ID"), width=90,
             command=lambda i=entry.lcsc_id: self._copy(i),
         ).grid(row=0, column=2, padx=2)
 

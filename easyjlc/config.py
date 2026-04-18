@@ -38,6 +38,20 @@ def data_dir() -> Path:
     return path
 
 
+def default_output_dir() -> Path:
+    """Pasta sugerida quando o usuário ainda não configurou nada.
+
+    Usa `Documents/EasyJLC` (via `platformdirs` para respeitar o path correto
+    em Linux/Windows/macOS). A pasta é só sugerida — nada é criado aqui.
+    """
+    try:
+        docs = Path(_dirs.user_documents_path)
+    except AttributeError:
+        # platformdirs < 4.2 não expunha user_documents_path.
+        docs = Path.home() / "Documents"
+    return docs / APP_NAME
+
+
 def settings_path() -> Path:
     return config_dir() / "settings.json"
 

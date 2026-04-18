@@ -35,6 +35,22 @@ def venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
+def _bootstrap_python() -> str | None:
+    """Interpretador a usar para criar o venv do easyeda2kicad.
+
+    Em dev usamos `sys.executable`. Em build PyInstaller isso aponta para o
+    próprio binário (que não é um Python funcional), então caímos para um
+    `python3`/`python` do PATH.
+    """
+    if getattr(sys, "frozen", False):
+        for name in ("python3", "python"):
+            found = shutil.which(name)
+            if found:
+                return found
+        return None
+    return sys.executable
+
+
 class EasyEdaError(RuntimeError):
     """Erro levantado por falhas no runner easyeda2kicad."""
 
@@ -76,10 +92,11 @@ class EasyEdaRunner:
                 return candidate
 
         # 2) Python do sistema (caso o usuário já tenha instalado).
-        sys_candidate = [sys.executable, "-m", "easyeda2kicad"]
-        if _runner_responds(sys_candidate):
-            self._runner_cmd = sys_candidate
-            return sys_candidate
+        if not getattr(sys, "frozen", False):
+            sys_candidate = [sys.executable, "-m", "easyeda2kicad"]
+            if _runner_responds(sys_candidate):
+                self._runner_cmd = sys_candidate
+                return sys_candidate
 
         # 3) CLI global instalada.
         cli = shutil.which("easyeda2kicad")
@@ -127,8 +144,24 @@ class EasyEdaRunner:
         py = venv_python(self.venv_dir)
         if not py.exists():
             cb(f'Criando virtualenv em "{self.venv_dir}"...')
+            bootstrap = _bootstrap_python()
+            if bootstrap is None:
+                cb(
+                    "Python 3 não encontrado no PATH. "
+                    "Instale python3 para habilitar os downloads."
+                )
+                return None
             try:
-                venv.EnvBuilder(with_pip=True).create(str(self.venv_dir))
+                if getattr(sys, "frozen", False):
+                    # Em build PyInstaller chamamos o python do sistema via subprocess
+                    # para não usar o módulo `venv` interno (que depende de `sys.executable`).
+                    if _run_streaming(
+                        [bootstrap, "-m", "venv", str(self.venv_dir)], cb
+                    ) != 0:
+                        cb("Falha ao criar venv via python3 -m venv.")
+                        return None
+                else:
+                    venv.EnvBuilder(with_pip=True).create(str(self.venv_dir))
             except Exception as exc:  # pragma: no cover — depende de SO
                 cb(f"Falha ao criar venv: {exc}")
                 return None

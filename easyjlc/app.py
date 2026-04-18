@@ -6,6 +6,7 @@ import logging
 
 from easyjlc import __version__
 from easyjlc import history as history_module
+from easyjlc import i18n
 from easyjlc import settings as settings_module
 from easyjlc.config import setup_logging
 from easyjlc.core import EasyEdaRunner, JlcClient
@@ -19,6 +20,7 @@ def main() -> int:
     log.info("Iniciando EasyJLC %s", __version__)
 
     user_settings = settings_module.load()
+    i18n.init(user_settings.language)
     history = history_module.load()
     runner = EasyEdaRunner()
     jlc_client = JlcClient()
