@@ -106,6 +106,21 @@ class Component:
             attributes=attributes,
         )
 
+    @classmethod
+    def fallback_lcsc(cls, lcsc_id: str, reason: str) -> "Component":
+        """Componente mínimo quando a API JLC falha mas o ID exato é conhecido."""
+        return cls(
+            lcsc_id=lcsc_id.strip().upper(),
+            mpn="",
+            manufacturer="",
+            package="",
+            description=f"Resultado local por LCSC ID. A API JLCPCB não retornou metadados: {reason}",
+            category="",
+            library_type="",
+            stock=0,
+            min_purchase=1,
+        )
+
 
 @dataclass
 class SearchResult:
@@ -113,6 +128,7 @@ class SearchResult:
     page: int
     page_size: int
     total: int
+    fallback_reason: str | None = None
 
     @property
     def total_pages(self) -> int:

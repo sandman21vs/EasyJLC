@@ -86,6 +86,18 @@ def test_search_http_error(tmp_path: Path):
         client.search("LM358")
 
 
+def test_search_http_error_exact_lcsc_falls_back(tmp_path: Path):
+    session = MagicMock()
+    session.post.return_value = _fake_response(403, {})
+    client = _make_client(tmp_path, session)
+
+    result = client.search("C129733")
+    assert result.total == 1
+    assert result.fallback_reason == "HTTP 403 da JLCPCB"
+    assert result.items[0].lcsc_id == "C129733"
+    assert "Resultado local" in result.items[0].description
+
+
 def test_search_api_error_code(tmp_path: Path):
     session = MagicMock()
     session.post.return_value = _fake_response(200, {"code": 101, "message": "oops"})
@@ -102,6 +114,16 @@ def test_search_network_error(tmp_path: Path):
 
     with pytest.raises(JlcApiError):
         client.search("LM358")
+
+
+def test_search_network_error_exact_lcsc_falls_back(tmp_path: Path):
+    session = MagicMock()
+    session.post.side_effect = requests.ConnectionError("offline")
+    client = _make_client(tmp_path, session)
+
+    result = client.search("c129733")
+    assert result.items[0].lcsc_id == "C129733"
+    assert result.fallback_reason is not None
 
 
 def test_get_component_by_id(tmp_path: Path):

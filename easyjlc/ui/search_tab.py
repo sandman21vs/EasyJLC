@@ -201,6 +201,14 @@ class SearchTab(ctk.CTkFrame):
                 text=f"Nenhum resultado para “{self._current_query}”"
             )
             self.on_log(f'[busca] nenhum resultado para "{self._current_query}"')
+        elif result.fallback_reason:
+            self.results_header.configure(
+                text=f"Resultado local para {result.items[0].lcsc_id} — API indisponível"
+            )
+            self.on_log(
+                f"[busca] fallback local para {result.items[0].lcsc_id}: "
+                f"{result.fallback_reason}"
+            )
         else:
             self.results_header.configure(
                 text=f"{result.total} resultados — mostrando {len(result.items)}"
@@ -256,9 +264,12 @@ class SearchTab(ctk.CTkFrame):
         mpn_lbl.grid(row=0, column=0, sticky="w")
         mpn_lbl.bind("<Button-1>", _fwd)
 
+        badge_text = (
+            " Basic " if comp.is_basic else " Extended " if comp.library_type else " LCSC ID "
+        )
         badge = ctk.CTkLabel(
             top,
-            text=" Basic " if comp.is_basic else " Extended ",
+            text=badge_text,
             fg_color="#2ecc71" if comp.is_basic else "#95a5a6",
             text_color="black",
             corner_radius=8,
@@ -544,8 +555,13 @@ class DetailPanel(ctk.CTkFrame):
         chip_row = ctk.CTkFrame(self.scroll, fg_color="transparent")
         chip_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
-        self._chip(chip_row, "Basic" if comp.is_basic else "Extended",
-                   fg="#2ecc71" if comp.is_basic else "#7f8c8d", col=0)
+        lib_label = "Basic" if comp.is_basic else "Extended" if comp.library_type else "LCSC ID"
+        self._chip(
+            chip_row,
+            lib_label,
+            fg="#2ecc71" if comp.is_basic else "#7f8c8d",
+            col=0,
+        )
         self._chip(chip_row, f"Estoque: {comp.stock:,}", fg="#3498db", col=1)
         unit1 = comp.unit_price_for(1)
         if unit1 is not None:

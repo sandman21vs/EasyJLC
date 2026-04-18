@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import requests
@@ -27,7 +28,10 @@ DEFAULT_HEADERS = {
     "Content-Type": "application/json;charset=UTF-8",
     "Origin": "https://jlcpcb.com",
     "Referer": "https://jlcpcb.com/parts",
+    "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
 }
+
+LCSC_ID_RE = re.compile(r"^C\d+$", re.IGNORECASE)
 
 
 class JlcApiError(RuntimeError):
@@ -76,9 +80,17 @@ class JlcClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as exc:
+            fallback = _fallback_exact_result(query, page, page_size, f"Falha de rede: {exc}")
+            if fallback is not None:
+                return fallback
             raise JlcApiError(f"Falha de rede: {exc}") from exc
 
         if resp.status_code != 200:
+            fallback = _fallback_exact_result(
+                query, page, page_size, f"HTTP {resp.status_code} da JLCPCB"
+            )
+            if fallback is not None:
+                return fallback
             raise JlcApiError(f"HTTP {resp.status_code} da JLCPCB.")
 
         try:
@@ -88,6 +100,11 @@ class JlcClient:
 
         if data.get("code") != 200:
             msg = data.get("message") or "erro desconhecido"
+            fallback = _fallback_exact_result(
+                query, page, page_size, f"JLCPCB recusou a busca: {msg}"
+            )
+            if fallback is not None:
+                return fallback
             raise JlcApiError(f"JLCPCB recusou a busca: {msg}")
 
         if use_cache:
@@ -108,3 +125,21 @@ class JlcClient:
             if item.lcsc_id.upper() == lcsc_id:
                 return item
         return None
+
+
+def _fallback_exact_result(
+    query: str,
+    page: int,
+    page_size: int,
+    reason: str,
+) -> SearchResult | None:
+    if page != 1 or not LCSC_ID_RE.match(query.strip()):
+        return None
+    lcsc_id = query.strip().upper()
+    return SearchResult(
+        items=[Component.fallback_lcsc(lcsc_id, reason)],
+        page=page,
+        page_size=page_size,
+        total=1,
+        fallback_reason=reason,
+    )
