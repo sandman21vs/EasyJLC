@@ -351,6 +351,9 @@ class SearchTab(ctk.CTkFrame):
         foot.bind("<Button-1>", _fwd)
 
     def _select(self, comp: Component) -> None:
+        if self._selected is not None and self._selected.lcsc_id == comp.lcsc_id:
+            self.on_log(f"[busca] seleção repetida ignorada: {comp.lcsc_id}")
+            return
         self._selected = comp
         self._image_token += 1
         self.on_log(
@@ -464,6 +467,7 @@ class SearchTab(ctk.CTkFrame):
     def _start_image_load(self, comp: Component) -> None:
         self._image_token += 1
         token = self._image_token
+        self.on_log(f"[imagem {comp.lcsc_id}] solicitação explícita")
         if not comp.image_url:
             self.on_log(f"[imagem {comp.lcsc_id}] sem image_access_id na resposta JLC")
             self.detail.clear_image("Imagem JLC indisponível.")
