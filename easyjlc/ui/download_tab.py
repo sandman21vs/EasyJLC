@@ -5,14 +5,17 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from pathlib import Path
 from tkinter import filedialog
 from typing import Callable
 
 import customtkinter as ctk
 
+from easyjlc.core import find_kicad_artifacts
 from easyjlc.core import EasyEdaError, EasyEdaRunner
 from easyjlc.settings import Settings
+from easyjlc.ui.preview_panel import PreviewPanel
 
 log = logging.getLogger("easyjlc.download_tab")
 
@@ -42,6 +45,7 @@ class DownloadTab(ctk.CTkFrame):
 
         self._msg_queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
         self._worker: threading.Thread | None = None
+        self._download_started_at: float | None = None
 
         self._build_ui()
         self.after(self.POLL_MS, self._poll_queue)
@@ -50,6 +54,7 @@ class DownloadTab(ctk.CTkFrame):
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(5, weight=1)
 
         ctk.CTkLabel(self, text="LCSC ID", anchor="w").grid(
             row=0, column=0, sticky="w", padx=(0, 10), pady=(4, 2)
@@ -93,6 +98,11 @@ class DownloadTab(ctk.CTkFrame):
         ctk.CTkLabel(
             self, textvariable=self.status_var, text_color="gray70", anchor="w"
         ).grid(row=4, column=0, columnspan=3, sticky="ew")
+
+        self.preview_panel = PreviewPanel(self)
+        self.preview_panel.grid(
+            row=5, column=0, columnspan=3, sticky="nsew", pady=(12, 0)
+        )
 
     def _render_recent(self) -> None:
         for child in self.recent_frame.winfo_children():
@@ -164,7 +174,9 @@ class DownloadTab(ctk.CTkFrame):
                 return
 
         self._set_running(True)
+        self._download_started_at = time.time()
         self.status_var.set(f"Baixando {lcsc_id}...")
+        self.preview_panel.clear("Preview aguardando o download terminar...")
 
         self._worker = threading.Thread(
             target=self._worker_entry,
@@ -222,8 +234,21 @@ class DownloadTab(ctk.CTkFrame):
                 self.settings.output_dir = output_dir
                 self.settings.add_recent_output(output_dir)
                 self._render_recent()
+                since = self._download_started_at
+                artifacts = find_kicad_artifacts(
+                    output_dir,
+                    changed_since=(since - 1.0) if since is not None else None,
+                )
+                warnings = self.preview_panel.show_artifacts(artifacts)
+                for warning in warnings:
+                    self.on_log(f"[preview] {warning}")
+            else:
+                self.preview_panel.clear(
+                    "Preview indisponível: escolha uma pasta de saída para localizar os arquivos."
+                )
         else:
             self.status_var.set(f"{lcsc_id} falhou. {message}".strip())
+            self.preview_panel.clear("Preview indisponível: download falhou.")
         self.on_finished(lcsc_id, output_dir, success, message)
 
     def _set_running(self, running: bool) -> None:
