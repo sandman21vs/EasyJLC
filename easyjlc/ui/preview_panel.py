@@ -47,8 +47,16 @@ class PreviewPanel(ctk.CTkFrame):
 
         if artifacts.symbol is not None:
             try:
-                self.symbol_canvas.show(parse_symbol_file(artifacts.symbol))
+                symbol = parse_symbol_file(artifacts.symbol)
+                self.symbol_canvas.show(symbol)
                 loaded.append(_short_path(artifacts.symbol))
+                warnings.append(
+                    "Símbolo carregado: "
+                    f"{symbol.name} ({len(symbol.pins)} pinos, "
+                    f"{len(symbol.rectangles)} retângulos, "
+                    f"{len(symbol.circles)} círculos, "
+                    f"{len(symbol.polylines)} polylines)"
+                )
             except (OSError, KiCadParseError) as exc:
                 self.symbol_canvas.clear("Símbolo indisponível.")
                 warnings.append(f"Símbolo: {exc}")
@@ -57,8 +65,14 @@ class PreviewPanel(ctk.CTkFrame):
 
         if artifacts.footprint is not None:
             try:
-                self.footprint_canvas.show(parse_footprint_file(artifacts.footprint))
+                footprint = parse_footprint_file(artifacts.footprint)
+                self.footprint_canvas.show(footprint)
                 loaded.append(_short_path(artifacts.footprint))
+                warnings.append(
+                    "Footprint carregado: "
+                    f"{footprint.name} ({len(footprint.lines)} linhas, "
+                    f"{len(footprint.pads)} pads)"
+                )
             except (OSError, KiCadParseError) as exc:
                 self.footprint_canvas.clear("Footprint indisponível.")
                 warnings.append(f"Footprint: {exc}")

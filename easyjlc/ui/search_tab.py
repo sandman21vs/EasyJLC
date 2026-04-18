@@ -14,6 +14,7 @@ import requests
 from PIL import Image
 
 from easyjlc.config import cache_dir
+from easyjlc.core.jlc_api import DEFAULT_HEADERS
 from easyjlc.core import (
     Component,
     EasyEdaError,
@@ -145,6 +146,7 @@ class SearchTab(ctk.CTkFrame):
             self.query_entry.focus_set()
             return
 
+        self.on_log(f'[busca] pesquisando "{query}" página {page}')
         self._current_query = query
         self._current_page = page
         self._set_searching(True)
@@ -198,9 +200,13 @@ class SearchTab(ctk.CTkFrame):
             self.results_header.configure(
                 text=f"Nenhum resultado para “{self._current_query}”"
             )
+            self.on_log(f'[busca] nenhum resultado para "{self._current_query}"')
         else:
             self.results_header.configure(
                 text=f"{result.total} resultados — mostrando {len(result.items)}"
+            )
+            self.on_log(
+                f'[busca] {result.total} resultados, exibindo {len(result.items)} na página {result.page}'
             )
 
         for child in self.results_scroll.winfo_children():
@@ -285,6 +291,11 @@ class SearchTab(ctk.CTkFrame):
 
     def _select(self, comp: Component) -> None:
         self._selected = comp
+        self.on_log(
+            "[busca] selecionado "
+            f"{comp.lcsc_id} | {comp.mpn or '-'} | pacote={comp.package or '-'} | "
+            f"estoque={comp.stock} | imagem={'sim' if comp.image_url else 'não'}"
+        )
         self.detail.show(comp)
         self._start_image_load(comp)
 
@@ -297,6 +308,7 @@ class SearchTab(ctk.CTkFrame):
             self._start_search(page=self._current_page + 1)
 
     def _trigger_download(self, comp: Component) -> None:
+        self.on_log(f"[busca] enviar {comp.lcsc_id} para Download direto")
         self.on_download(comp.lcsc_id)
 
     def _start_preview(self, comp: Component) -> None:
@@ -304,6 +316,7 @@ class SearchTab(ctk.CTkFrame):
             self.on_log("Já há um preview em andamento.")
             return
 
+        self.on_log(f"[preview {comp.lcsc_id}] solicitado na aba Buscar")
         self.detail.set_preview_running(True)
         self._preview_worker = threading.Thread(
             target=self._worker_preview, args=(comp.lcsc_id,), daemon=True
@@ -318,7 +331,14 @@ class SearchTab(ctk.CTkFrame):
             self._msg_queue.put(("preview_err", (lcsc_id, f"Falha ao criar cache: {exc}")))
             return
 
-        existing = find_kicad_artifacts(preview_dir)
+        existing = find_kicad_artifacts(preview_dir, lcsc_id=lcsc_id)
+        self._msg_queue.put(
+            (
+                "log",
+                f"[preview {lcsc_id}] cache {preview_dir} "
+                f"symbol={existing.symbol or '-'} footprint={existing.footprint or '-'}",
+            )
+        )
         if existing.has_all:
             self._msg_queue.put(("preview_ok", (lcsc_id, existing)))
             return
@@ -340,7 +360,15 @@ class SearchTab(ctk.CTkFrame):
             self._msg_queue.put(("preview_err", (lcsc_id, f"easyeda2kicad retornou {rc}")))
             return
 
-        self._msg_queue.put(("preview_ok", (lcsc_id, find_kicad_artifacts(preview_dir))))
+        artifacts = find_kicad_artifacts(preview_dir, lcsc_id=lcsc_id)
+        self._msg_queue.put(
+            (
+                "log",
+                f"[preview {lcsc_id}] após download "
+                f"symbol={artifacts.symbol or '-'} footprint={artifacts.footprint or '-'}",
+            )
+        )
+        self._msg_queue.put(("preview_ok", (lcsc_id, artifacts)))
 
     def _render_preview(self, lcsc_id: str, artifacts) -> None:
         if self._selected is None or self._selected.lcsc_id != lcsc_id:
@@ -361,9 +389,11 @@ class SearchTab(ctk.CTkFrame):
         self._image_token += 1
         token = self._image_token
         if not comp.image_url:
+            self.on_log(f"[imagem {comp.lcsc_id}] sem image_access_id na resposta JLC")
             self.detail.clear_image("Imagem JLC indisponível.")
             return
 
+        self.on_log(f"[imagem {comp.lcsc_id}] carregando {comp.image_url}")
         self.detail.set_image_loading()
         self._image_worker = threading.Thread(
             target=self._worker_image, args=(token, comp.lcsc_id, comp.image_url), daemon=True
@@ -372,11 +402,19 @@ class SearchTab(ctk.CTkFrame):
 
     def _worker_image(self, token: int, lcsc_id: str, url: str) -> None:
         try:
-            resp = requests.get(url, timeout=12)
+            resp = requests.get(url, timeout=12, headers=DEFAULT_HEADERS)
             resp.raise_for_status()
-        except requests.RequestException:
+        except requests.RequestException as exc:
+            self._msg_queue.put(("log", f"[imagem {lcsc_id}] falhou: {exc}"))
             self._msg_queue.put(("image_err", (token, lcsc_id)))
             return
+        self._msg_queue.put(
+            (
+                "log",
+                f"[imagem {lcsc_id}] HTTP {resp.status_code}, {len(resp.content)} bytes, "
+                f"content-type={resp.headers.get('content-type', '-')}",
+            )
+        )
         self._msg_queue.put(("image_ok", (token, lcsc_id, resp.content)))
 
     def _render_image(self, token: int, lcsc_id: str, data: bytes) -> None:
@@ -389,8 +427,10 @@ class SearchTab(ctk.CTkFrame):
         try:
             image = Image.open(BytesIO(data))
         except OSError:
+            self.on_log(f"[imagem {lcsc_id}] PIL não reconheceu os bytes retornados")
             self.detail.clear_image("Imagem JLC inválida.")
             return
+        self.on_log(f"[imagem {lcsc_id}] exibindo {image.format or '-'} {image.size[0]}x{image.size[1]}")
         self.detail.show_image(image)
 
     def _render_image_error(self, token: int, lcsc_id: str) -> None:
@@ -618,6 +658,7 @@ class DetailPanel(ctk.CTkFrame):
         self.image_label.configure(image=None, text="Carregando imagem JLC...")
 
     def show_image(self, image: Image.Image) -> None:
+        image = image.convert("RGBA")
         image.thumbnail((220, 90), Image.Resampling.LANCZOS)
         self._image_ref = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
         self.image_label.configure(image=self._image_ref, text="")

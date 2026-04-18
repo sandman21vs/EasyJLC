@@ -168,7 +168,7 @@ def parse_symbol(root: Sexp, symbol_name: str | None = None) -> SymbolPreview:
 
 
 def parse_footprint(root: Sexp) -> FootprintPreview:
-    if not _is_list(root) or _head(root) != "footprint":
+    if not _is_list(root) or _head(root) not in {"footprint", "module"}:
         raise KiCadParseError("Arquivo não parece ser um footprint KiCad.")
 
     name = _atom(root, 1) or ""

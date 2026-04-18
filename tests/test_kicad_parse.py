@@ -114,6 +114,20 @@ def test_parse_footprint_file(tmp_path: Path):
     assert parse_footprint_file(path).name == "SOIC-8"
 
 
+def test_parse_legacy_module_footprint():
+    text = """
+    (module easyeda2kicad:SOT-23 (layer F.Cu)
+      (fp_line (start -1 -1) (end 1 -1) (layer F.SilkS) (width 0.12))
+      (pad 1 smd rect (at -0.95 0 0) (size 0.6 1.0) (layers F.Cu F.Paste F.Mask))
+    )
+    """
+    footprint = parse_footprint(parse_sexpr(text))
+    assert footprint.name == "easyeda2kicad:SOT-23"
+    assert len(footprint.lines) == 1
+    assert len(footprint.pads) == 1
+    assert footprint.pads[0].number == "1"
+
+
 def test_parse_errors_on_malformed_input():
     with pytest.raises(KiCadParseError):
         parse_sexpr("(root (missing)")

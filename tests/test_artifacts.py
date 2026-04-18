@@ -13,7 +13,7 @@ def test_find_kicad_artifacts_returns_newest_files(tmp_path: Path):
     new_sym.parent.mkdir()
 
     for path in [old_sym, new_sym, old_mod, new_mod]:
-        path.write_text("", encoding="utf-8")
+        path.write_text('(property "LCSC Part" "C2040")', encoding="utf-8")
 
     old = time.time() - 100
     now = time.time()
@@ -45,3 +45,18 @@ def test_find_kicad_artifacts_filters_by_mtime(tmp_path: Path):
 def test_find_kicad_artifacts_missing_root():
     artifacts = find_kicad_artifacts("/path/that/does/not/exist")
     assert artifacts.has_any is False
+
+
+def test_find_kicad_artifacts_can_filter_by_lcsc_id(tmp_path: Path):
+    c1_sym = tmp_path / "c1.kicad_sym"
+    c2_sym = tmp_path / "c2.kicad_sym"
+    c1_mod = tmp_path / "c1.kicad_mod"
+    c2_mod = tmp_path / "c2.kicad_mod"
+    c1_sym.write_text('(property "LCSC Part" "C1")', encoding="utf-8")
+    c2_sym.write_text('(property "LCSC Part" "C2")', encoding="utf-8")
+    c1_mod.write_text('(property "LCSC Part" "C1")', encoding="utf-8")
+    c2_mod.write_text('(property "LCSC Part" "C2")', encoding="utf-8")
+
+    artifacts = find_kicad_artifacts(tmp_path, lcsc_id="C1")
+    assert artifacts.symbol == c1_sym
+    assert artifacts.footprint == c1_mod

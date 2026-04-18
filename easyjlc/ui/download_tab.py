@@ -151,6 +151,7 @@ class DownloadTab(ctk.CTkFrame):
 
     def trigger_download(self, lcsc_id: str, output_dir: str | None) -> None:
         """Permite outra aba (ex.: Histórico) disparar um download."""
+        self.on_log(f"[download] trigger externo para {lcsc_id}, output={output_dir or '(campo atual)'}")
         self.lcsc_var.set(lcsc_id)
         if output_dir is not None:
             self.output_var.set(output_dir)
@@ -169,6 +170,7 @@ class DownloadTab(ctk.CTkFrame):
 
         raw_output = self.output_var.get().strip()
         output_dir: Path | None = Path(raw_output).expanduser() if raw_output else None
+        self.on_log(f"[download] iniciar {lcsc_id}, output={output_dir or '(default easyeda2kicad)'}")
 
         if output_dir is not None and not output_dir.exists():
             try:
@@ -233,6 +235,10 @@ class DownloadTab(ctk.CTkFrame):
         self, lcsc_id: str, output_dir: str | None, success: bool, message: str
     ) -> None:
         self._set_running(False)
+        self.on_log(
+            f"[download] finalizado {lcsc_id}: success={success}, "
+            f"output={output_dir or '(default)'}, message={message or '-'}"
+        )
         if success:
             self.status_var.set(f"{lcsc_id} baixado.")
             if output_dir:
@@ -243,9 +249,18 @@ class DownloadTab(ctk.CTkFrame):
                 artifacts = find_kicad_artifacts(
                     output_dir,
                     changed_since=(since - 1.0) if since is not None else None,
+                    lcsc_id=lcsc_id,
+                )
+                self.on_log(
+                    f"[preview] busca pós-download filtrada por {lcsc_id}: "
+                    f"symbol={artifacts.symbol or '-'} footprint={artifacts.footprint or '-'}"
                 )
                 if not artifacts.has_all:
-                    artifacts = find_kicad_artifacts(output_dir)
+                    artifacts = find_kicad_artifacts(output_dir, lcsc_id=lcsc_id)
+                    self.on_log(
+                        f"[preview] fallback na pasta inteira filtrado por {lcsc_id}: "
+                        f"symbol={artifacts.symbol or '-'} footprint={artifacts.footprint or '-'}"
+                    )
                 warnings = self.preview_panel.show_artifacts(artifacts)
                 self._last_preview_lcsc_id = lcsc_id
                 for warning in warnings:
@@ -273,4 +288,5 @@ class DownloadTab(ctk.CTkFrame):
         if lcsc_id == self._last_preview_lcsc_id:
             return
         self._last_preview_lcsc_id = ""
+        self.on_log(f"[download] LCSC ID alterado para {lcsc_id or '(vazio)'}; limpando preview")
         self.preview_panel.clear("Preview: baixe este componente para atualizar.")
