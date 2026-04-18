@@ -6,6 +6,7 @@ import logging
 import queue
 import re
 import threading
+import time
 from io import BytesIO
 from pathlib import Path
 from typing import Callable
@@ -61,10 +62,14 @@ class SearchTab(ctk.CTkFrame):
         self._current_page = 1
         self._total_pages = 1
         self._current_query = ""
+        self._results_query = ""
         self._image_token = 0
+        self._image_cache: dict[str, Image.Image] = {}
         self._search_token = 0
         self._search_running = False
         self._pending_search: tuple[str, int] | None = None
+        self._last_search_key: tuple[str, int] | None = None
+        self._last_search_at = 0.0
 
         self._build_ui()
         self.after(POLL_MS, self._poll_queue)
@@ -89,6 +94,7 @@ class SearchTab(ctk.CTkFrame):
         self.query_entry.grid(row=0, column=0, sticky="ew")
         self.query_entry.bind("<Return>", lambda _e: self._start_search())
         bind_select_all(self.query_entry)
+        self.query_var.trace_add("write", self._on_query_changed)
 
         self.search_btn = ctk.CTkButton(
             search_bar, text="Buscar", width=110, command=self._start_search
@@ -142,8 +148,8 @@ class SearchTab(ctk.CTkFrame):
 
     # ---------- Ações ----------
 
-    def _start_search(self, page: int = 1) -> None:
-        query = self.query_var.get().strip()
+    def _start_search(self, page: int = 1, query_override: str | None = None) -> None:
+        query = (query_override if query_override is not None else self.query_var.get()).strip()
         if not query:
             self.query_entry.focus_set()
             return
@@ -154,17 +160,28 @@ class SearchTab(ctk.CTkFrame):
         if self._search_running and self._pending_search == (query, page):
             self.on_log(f'[busca] ignorando busca duplicada em andamento "{query}" página {page}')
             return
+        key = (query, page)
+        now = time.monotonic()
+        if key == self._last_search_key and now - self._last_search_at < 0.5:
+            self.on_log(f'[busca] ignorando repetição rápida "{query}" página {page}')
+            return
 
         if self._worker and self._worker.is_alive():
             self.on_log("[busca] busca anterior ainda em andamento; iniciando uma nova e ignorando a anterior")
 
         self._search_token += 1
         token = self._search_token
+        self._last_search_key = key
+        self._last_search_at = now
         self.on_log(f'[busca] pesquisando "{query}" página {page} token={token}')
         self._current_query = query
         self._current_page = page
+        self._selected = None
+        self._image_token += 1
         self._pending_search = (query, page)
         self._set_searching(True)
+        self._clear_results()
+        self.detail.reset("Selecione um resultado para carregar imagem e detalhes.")
         self.results_header.configure(text=f"Buscando “{query}”...")
 
         self._worker = threading.Thread(
@@ -216,6 +233,7 @@ class SearchTab(ctk.CTkFrame):
         self._set_searching(False)
         self._current_components = result.items
         self._total_pages = result.total_pages
+        self._results_query = self._current_query
 
         if not result.items:
             self.results_header.configure(
@@ -238,8 +256,7 @@ class SearchTab(ctk.CTkFrame):
                 f'[busca] {result.total} resultados, exibindo {len(result.items)} na página {result.page}'
             )
 
-        for child in self.results_scroll.winfo_children():
-            child.destroy()
+        self._clear_results()
 
         for idx, comp in enumerate(result.items):
             self._build_result_row(idx, comp)
@@ -252,9 +269,6 @@ class SearchTab(ctk.CTkFrame):
             state="normal" if result.page < result.total_pages else "disabled"
         )
 
-        if result.items:
-            self._select(result.items[0])
-
     def _render_error(self, token: int, message: str) -> None:
         if token != self._search_token:
             self.on_log(f"[busca] ignorando erro antigo token={token}: {message}")
@@ -263,8 +277,8 @@ class SearchTab(ctk.CTkFrame):
         self._set_searching(False)
         self.results_header.configure(text=f"Erro: {message}")
         self.on_log(f"[busca] {message}")
-        for child in self.results_scroll.winfo_children():
-            child.destroy()
+        self._clear_results()
+        self.detail.reset("Busca falhou. Ajuste o termo e tente novamente.")
 
     def _build_result_row(self, idx: int, comp: Component) -> None:
         row = ctk.CTkFrame(self.results_scroll, border_width=1, border_color="gray30")
@@ -339,18 +353,24 @@ class SearchTab(ctk.CTkFrame):
         if self._search_running:
             self.on_log("[busca] paginação ignorada: busca em andamento")
             return
+        if self.query_var.get().strip() != self._results_query:
+            self.on_log("[busca] paginação ignorada: termo do campo mudou desde o último resultado")
+            return
         if self._current_page > 1:
-            self._start_search(page=self._current_page - 1)
+            self._start_search(page=self._current_page - 1, query_override=self._results_query)
 
     def _next_page(self) -> None:
         if self._search_running:
             self.on_log("[busca] paginação ignorada: busca em andamento")
             return
-        if LCSC_ID_RE.match(self.query_var.get().strip()):
+        if self.query_var.get().strip() != self._results_query:
+            self.on_log("[busca] paginação ignorada: termo do campo mudou desde o último resultado")
+            return
+        if LCSC_ID_RE.match(self._results_query):
             self.on_log("[busca] paginação ignorada: LCSC ID exato não tem página 2")
             return
         if self._current_page < self._total_pages:
-            self._start_search(page=self._current_page + 1)
+            self._start_search(page=self._current_page + 1, query_override=self._results_query)
 
     def _trigger_download(self, comp: Component) -> None:
         self.on_log(f"[busca] enviar {comp.lcsc_id} para Download direto")
@@ -437,6 +457,12 @@ class SearchTab(ctk.CTkFrame):
             self.on_log(f"[imagem {comp.lcsc_id}] sem image_access_id na resposta JLC")
             self.detail.clear_image("Imagem JLC indisponível.")
             return
+        cache_key = comp.image_access_id or comp.image_url
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            self.on_log(f"[imagem {comp.lcsc_id}] exibindo imagem em cache")
+            self.detail.show_image(cached.copy())
+            return
 
         self.on_log(f"[imagem {comp.lcsc_id}] carregando {comp.image_url}")
         self.detail.set_image_loading()
@@ -475,6 +501,8 @@ class SearchTab(ctk.CTkFrame):
             self.on_log(f"[imagem {lcsc_id}] PIL não reconheceu os bytes retornados")
             self.detail.clear_image("Imagem JLC inválida.")
             return
+        if self._selected and self._selected.image_access_id:
+            self._image_cache[self._selected.image_access_id] = image.copy()
         self.on_log(f"[imagem {lcsc_id}] exibindo {image.format or '-'} {image.size[0]}x{image.size[1]}")
         self.detail.show_image(image)
 
@@ -494,6 +522,18 @@ class SearchTab(ctk.CTkFrame):
         )
         self.query_entry.configure(state="normal")
         if running:
+            self.prev_btn.configure(state="disabled")
+            self.next_btn.configure(state="disabled")
+
+    def _clear_results(self) -> None:
+        for child in self.results_scroll.winfo_children():
+            child.destroy()
+        self.page_label.configure(text="")
+        self.prev_btn.configure(state="disabled")
+        self.next_btn.configure(state="disabled")
+
+    def _on_query_changed(self, *_args) -> None:
+        if self.query_var.get().strip() != self._results_query:
             self.prev_btn.configure(state="disabled")
             self.next_btn.configure(state="disabled")
 
@@ -719,6 +759,17 @@ class DetailPanel(ctk.CTkFrame):
     def clear_image(self, message: str) -> None:
         self._image_ref = None
         self.image_label.configure(image=None, text=message)
+
+    def reset(self, message: str = "Selecione um resultado") -> None:
+        self._component = None
+        self.title_lbl.configure(text=message)
+        self.sub_lbl.configure(text="")
+        self.download_btn.configure(state="disabled")
+        self.preview_btn.configure(state="disabled", text="Pré-visualizar")
+        self.clear_image("Imagem JLC")
+        self.preview_panel.clear("Preview: selecione um componente.")
+        for child in self.scroll.winfo_children():
+            child.destroy()
 
 
 def _preview_dir(lcsc_id: str) -> Path:
