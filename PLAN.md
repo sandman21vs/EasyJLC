@@ -116,25 +116,26 @@ EasyJLC/
 ## 4. Roadmap
 
 ### Sprint 1 — Fundação (2–3 dias)
-- [ ] `pyproject.toml`, `requirements.txt`, `.gitignore`, README inicial.
-- [ ] Esqueleto do pacote `easyjlc/` com `app.py` abrindo janela CustomTkinter vazia.
-- [ ] `config.py` resolvendo diretórios XDG / AppData (usar `platformdirs`).
-- [ ] `settings.py` e `history.py` com persistência JSON + testes.
-- [ ] Script `run_dev.sh` / `run_dev.bat` que cria venv local e chama `python -m easyjlc`.
+- [x] `pyproject.toml`, `requirements.txt`, `.gitignore`, README inicial.
+- [x] Esqueleto do pacote `easyjlc/` com `app.py` abrindo janela CustomTkinter vazia.
+- [x] `config.py` resolvendo diretórios XDG / AppData (usar `platformdirs`).
+- [x] `settings.py` e `history.py` com persistência JSON + testes.
+- [x] Script `run_dev.sh` / `run_dev.bat` que cria venv local e chama `python -m easyjlc`.
 
 ### Sprint 2 — Paridade com o downloader atual (2 dias)
-- [ ] `core/easyeda.py`: porta da lógica de venv/subprocess de `legacy/jlc_downloader.py`.
-- [ ] Tela principal: campo LCSC ID, seletor de pasta (tkinter `filedialog`), botão Baixar, log tab.
-- [ ] Integração com histórico e preferências.
+- [x] `core/easyeda.py`: porta da lógica de venv/subprocess de `legacy/jlc_downloader.py`.
+- [x] Tela principal: campo LCSC ID, seletor de pasta (tkinter `filedialog`), botão Baixar, log tab.
+- [x] Integração com histórico e preferências.
 - [ ] Teste manual: baixar `C2040` em Linux e Windows.
 
 ### Sprint 3 — Busca, preço, estoque (3–4 dias)
-- [ ] `core/jlc_api.py`: endpoints de busca e detalhe; cache em disco.
-- [ ] `ui/search_panel.py` + `ui/detail_panel.py` com resultado paginado e filtros básicos.
-- [ ] Chips de preço/estoque/Basic-Extended no detail panel.
+- [x] `core/jlc_api.py`: endpoints de busca e detalhe; cache em disco.
+- [x] `ui/search_panel.py` + `ui/detail_panel.py` com resultado paginado.
+- [ ] Filtros básicos.
+- [x] Chips de preço/estoque/Basic-Extended no detail panel.
 
 ### Sprint 4 — Preview renderizado (4–5 dias)
-- [ ] `core/kicad_parse.py`: parser S-expr lendo `.kicad_sym` (versão ≥ 7) e `.kicad_mod`.
+- [x] `core/kicad_parse.py`: parser S-expr lendo `.kicad_sym` (versão ≥ 7) e `.kicad_mod`.
 - [ ] `ui/preview_canvas.py`: desenha símbolo (pinos, retângulos, texto) em `tk.Canvas` com zoom/pan.
 - [ ] `ui/footprint_canvas.py`: desenha pads + silkscreen (várias camadas coloridas).
 - [ ] Cache do parse para evitar reparsear em navegação.

@@ -6,7 +6,7 @@ Sucessor dos scripts `jlc_downloader.py` / `.bat` (preservados em [`legacy/`](le
 
 ## Status
 
-Sprint 1 (fundação) — em andamento. MVP não pronto para uso ainda.
+Sprint 4 iniciada. Fundação, download direto, histórico, preferências e busca com preço/estoque já estão implementados. A base do preview KiCad (`.kicad_sym` / `.kicad_mod`) está em desenvolvimento; MVP ainda não está fechado.
 
 ## Requisitos
 
