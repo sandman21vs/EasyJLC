@@ -5,11 +5,23 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+from pathlib import Path
 from typing import Callable
 
 import customtkinter as ctk
 
-from easyjlc.core import Component, JlcApiError, JlcClient, SearchResult
+from easyjlc.config import cache_dir
+from easyjlc.core import (
+    Component,
+    EasyEdaError,
+    EasyEdaRunner,
+    JlcApiError,
+    JlcClient,
+    SearchResult,
+    find_kicad_artifacts,
+)
+from easyjlc.ui.bindings import bind_select_all
+from easyjlc.ui.preview_panel import PreviewPanel
 
 log = logging.getLogger("easyjlc.search_tab")
 
@@ -24,11 +36,13 @@ class SearchTab(ctk.CTkFrame):
         self,
         master,
         client: JlcClient,
+        runner: EasyEdaRunner,
         on_download: Callable[[str], None],
         on_log: Callable[[str], None],
     ) -> None:
         super().__init__(master, fg_color="transparent")
         self.client = client
+        self.runner = runner
         self.on_download = on_download
         self.on_log = on_log
 
@@ -36,6 +50,7 @@ class SearchTab(ctk.CTkFrame):
         self._current_components: list[Component] = []
         self._selected: Component | None = None
         self._worker: threading.Thread | None = None
+        self._preview_worker: threading.Thread | None = None
         self._current_page = 1
         self._total_pages = 1
         self._current_query = ""
@@ -62,6 +77,7 @@ class SearchTab(ctk.CTkFrame):
         )
         self.query_entry.grid(row=0, column=0, sticky="ew")
         self.query_entry.bind("<Return>", lambda _e: self._start_search())
+        bind_select_all(self.query_entry)
 
         self.search_btn = ctk.CTkButton(
             search_bar, text="Buscar", width=110, command=self._start_search
@@ -106,7 +122,11 @@ class SearchTab(ctk.CTkFrame):
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(0, weight=1)
 
-        self.detail = DetailPanel(right, on_download=self._trigger_download)
+        self.detail = DetailPanel(
+            right,
+            on_download=self._trigger_download,
+            on_preview=self._start_preview,
+        )
         self.detail.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
 
     # ---------- Ações ----------
@@ -148,6 +168,12 @@ class SearchTab(ctk.CTkFrame):
                     self._render_results(payload)  # type: ignore[arg-type]
                 elif kind == "err":
                     self._render_error(str(payload))
+                elif kind == "preview_ok":
+                    lcsc_id, artifacts = payload  # type: ignore[misc]
+                    self._render_preview(str(lcsc_id), artifacts)
+                elif kind == "preview_err":
+                    lcsc_id, message = payload  # type: ignore[misc]
+                    self._render_preview_error(str(lcsc_id), str(message))
         except queue.Empty:
             pass
         self.after(POLL_MS, self._poll_queue)
@@ -261,6 +287,64 @@ class SearchTab(ctk.CTkFrame):
     def _trigger_download(self, comp: Component) -> None:
         self.on_download(comp.lcsc_id)
 
+    def _start_preview(self, comp: Component) -> None:
+        if self._preview_worker and self._preview_worker.is_alive():
+            self.on_log("Já há um preview em andamento.")
+            return
+
+        self.detail.set_preview_running(True)
+        self._preview_worker = threading.Thread(
+            target=self._worker_preview, args=(comp.lcsc_id,), daemon=True
+        )
+        self._preview_worker.start()
+
+    def _worker_preview(self, lcsc_id: str) -> None:
+        preview_dir = _preview_dir(lcsc_id)
+        try:
+            preview_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._msg_queue.put(("preview_err", (lcsc_id, f"Falha ao criar cache: {exc}")))
+            return
+
+        existing = find_kicad_artifacts(preview_dir)
+        if existing.has_any:
+            self._msg_queue.put(("preview_ok", (lcsc_id, existing)))
+            return
+
+        def cb(line: str) -> None:
+            self._msg_queue.put(("log", f"[preview {lcsc_id}] {line}"))
+
+        try:
+            rc = self.runner.download(lcsc_id, preview_dir, log_cb=cb)
+        except EasyEdaError as exc:
+            self._msg_queue.put(("preview_err", (lcsc_id, str(exc))))
+            return
+        except Exception as exc:  # pragma: no cover — defesa extra
+            log.exception("Erro inesperado no preview")
+            self._msg_queue.put(("preview_err", (lcsc_id, f"Erro inesperado: {exc}")))
+            return
+
+        if rc != 0:
+            self._msg_queue.put(("preview_err", (lcsc_id, f"easyeda2kicad retornou {rc}")))
+            return
+
+        self._msg_queue.put(("preview_ok", (lcsc_id, find_kicad_artifacts(preview_dir))))
+
+    def _render_preview(self, lcsc_id: str, artifacts) -> None:
+        if self._selected is None or self._selected.lcsc_id != lcsc_id:
+            return
+        self.detail.set_preview_running(False)
+        warnings = self.detail.show_preview(artifacts)
+        for warning in warnings:
+            self.on_log(f"[preview {lcsc_id}] {warning}")
+
+    def _render_preview_error(self, lcsc_id: str, message: str) -> None:
+        if self._selected is None or self._selected.lcsc_id != lcsc_id:
+            return
+        self.detail.set_preview_running(False)
+        self.detail.clear_preview(f"Preview falhou: {message}")
+        self.on_log(f"[preview {lcsc_id}] {message}")
+
     def _set_searching(self, running: bool) -> None:
         state = "disabled" if running else "normal"
         self.search_btn.configure(
@@ -270,13 +354,20 @@ class SearchTab(ctk.CTkFrame):
 
 
 class DetailPanel(ctk.CTkFrame):
-    def __init__(self, master, on_download: Callable[[Component], None]) -> None:
+    def __init__(
+        self,
+        master,
+        on_download: Callable[[Component], None],
+        on_preview: Callable[[Component], None],
+    ) -> None:
         super().__init__(master, fg_color="transparent")
         self.on_download = on_download
+        self.on_preview = on_preview
         self._component: Component | None = None
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(2, weight=2)
+        self.grid_rowconfigure(3, weight=3)
 
         self.title_lbl = ctk.CTkLabel(
             self,
@@ -296,9 +387,21 @@ class DetailPanel(ctk.CTkFrame):
         self.scroll.grid(row=2, column=0, sticky="nsew")
         self.scroll.grid_columnconfigure(0, weight=1)
 
+        self.preview_panel = PreviewPanel(self)
+        self.preview_panel.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
+
         self.action_bar = ctk.CTkFrame(self, fg_color="transparent")
-        self.action_bar.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-        self.action_bar.grid_columnconfigure(0, weight=1)
+        self.action_bar.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+        self.action_bar.grid_columnconfigure((0, 1), weight=1)
+
+        self.preview_btn = ctk.CTkButton(
+            self.action_bar,
+            text="Pré-visualizar",
+            height=38,
+            command=self._click_preview,
+            state="disabled",
+        )
+        self.preview_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
 
         self.download_btn = ctk.CTkButton(
             self.action_bar,
@@ -308,7 +411,7 @@ class DetailPanel(ctk.CTkFrame):
             command=self._click_download,
             state="disabled",
         )
-        self.download_btn.grid(row=0, column=0, sticky="ew")
+        self.download_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
     def show(self, comp: Component) -> None:
         self._component = comp
@@ -324,6 +427,8 @@ class DetailPanel(ctk.CTkFrame):
         self.sub_lbl.configure(text="  •  ".join(parts))
 
         self.download_btn.configure(state="normal")
+        self.preview_btn.configure(state="normal", text="Pré-visualizar")
+        self.preview_panel.clear("Preview: clique em Pré-visualizar para carregar.")
 
         for child in self.scroll.winfo_children():
             child.destroy()
@@ -421,6 +526,29 @@ class DetailPanel(ctk.CTkFrame):
     def _click_download(self) -> None:
         if self._component:
             self.on_download(self._component)
+
+    def _click_preview(self) -> None:
+        if self._component:
+            self.on_preview(self._component)
+
+    def set_preview_running(self, running: bool) -> None:
+        self.preview_btn.configure(
+            state="disabled" if running else "normal",
+            text="Carregando..." if running else "Pré-visualizar",
+        )
+        if running:
+            self.preview_panel.clear("Preview carregando arquivos KiCad...")
+
+    def show_preview(self, artifacts) -> list[str]:
+        return self.preview_panel.show_artifacts(artifacts)
+
+    def clear_preview(self, message: str) -> None:
+        self.preview_panel.clear(message)
+
+
+def _preview_dir(lcsc_id: str) -> Path:
+    safe_id = "".join(ch for ch in lcsc_id.upper() if ch.isalnum() or ch in {"_", "-"})
+    return cache_dir() / "previews" / safe_id
 
 
 def _open_url(url: str) -> None:

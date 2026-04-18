@@ -15,6 +15,7 @@ import customtkinter as ctk
 from easyjlc.core import find_kicad_artifacts
 from easyjlc.core import EasyEdaError, EasyEdaRunner
 from easyjlc.settings import Settings
+from easyjlc.ui.bindings import bind_select_all
 from easyjlc.ui.preview_panel import PreviewPanel
 
 log = logging.getLogger("easyjlc.download_tab")
@@ -65,6 +66,7 @@ class DownloadTab(ctk.CTkFrame):
         )
         self.lcsc_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(4, 2))
         self.lcsc_entry.bind("<Return>", lambda _e: self._start_download())
+        bind_select_all(self.lcsc_entry)
 
         ctk.CTkLabel(self, text="Pasta de saída", anchor="w").grid(
             row=1, column=0, sticky="w", padx=(0, 10), pady=(10, 2)
@@ -76,6 +78,7 @@ class DownloadTab(ctk.CTkFrame):
             placeholder_text="Deixe vazio para usar a pasta default do easyeda2kicad",
         )
         self.output_entry.grid(row=1, column=1, sticky="ew", pady=(10, 2))
+        bind_select_all(self.output_entry)
 
         ctk.CTkButton(self, text="Procurar...", width=110, command=self._browse).grid(
             row=1, column=2, sticky="e", padx=(8, 0), pady=(10, 2)

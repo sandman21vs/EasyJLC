@@ -87,6 +87,7 @@ class MainWindow(ctk.CTk):
         self.search_tab = SearchTab(
             self.tabs.tab("Buscar"),
             client=self.jlc_client,
+            runner=self.runner,
             on_download=self._download_from_search,
             on_log=self._handle_log,
         )
