@@ -33,7 +33,7 @@ log = logging.getLogger("easyjlc.search_tab")
 
 POLL_MS = 80
 PAGE_SIZE = 20
-SEARCH_WATCHDOG_MS = 8000
+SEARCH_WATCHDOG_MS = 4000
 LCSC_ID_RE = re.compile(r"^C\d+$", re.IGNORECASE)
 
 
@@ -145,6 +145,7 @@ class SearchTab(ctk.CTkFrame):
             right,
             on_download=self._trigger_download,
             on_preview=self._start_preview,
+            on_image=self._start_image_load,
         )
         self.detail.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
 
@@ -351,13 +352,13 @@ class SearchTab(ctk.CTkFrame):
 
     def _select(self, comp: Component) -> None:
         self._selected = comp
+        self._image_token += 1
         self.on_log(
             "[busca] selecionado "
             f"{comp.lcsc_id} | {comp.mpn or '-'} | pacote={comp.package or '-'} | "
             f"estoque={comp.stock} | imagem={'sim' if comp.image_url else 'não'}"
         )
         self.detail.show(comp)
-        self._start_image_load(comp)
 
     def _prev_page(self) -> None:
         if self._search_running:
@@ -581,10 +582,12 @@ class DetailPanel(ctk.CTkFrame):
         master,
         on_download: Callable[[Component], None],
         on_preview: Callable[[Component], None],
+        on_image: Callable[[Component], None],
     ) -> None:
         super().__init__(master, fg_color="transparent")
         self.on_download = on_download
         self.on_preview = on_preview
+        self.on_image = on_image
         self._component: Component | None = None
 
         self.grid_columnconfigure(0, weight=1)
@@ -625,7 +628,16 @@ class DetailPanel(ctk.CTkFrame):
 
         self.action_bar = ctk.CTkFrame(self, fg_color="transparent")
         self.action_bar.grid(row=5, column=0, sticky="ew", pady=(8, 0))
-        self.action_bar.grid_columnconfigure((0, 1), weight=1)
+        self.action_bar.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.image_btn = ctk.CTkButton(
+            self.action_bar,
+            text="Carregar imagem",
+            height=38,
+            command=self._click_image,
+            state="disabled",
+        )
+        self.image_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
 
         self.preview_btn = ctk.CTkButton(
             self.action_bar,
@@ -634,7 +646,7 @@ class DetailPanel(ctk.CTkFrame):
             command=self._click_preview,
             state="disabled",
         )
-        self.preview_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.preview_btn.grid(row=0, column=1, sticky="ew", padx=4)
 
         self.download_btn = ctk.CTkButton(
             self.action_bar,
@@ -644,7 +656,7 @@ class DetailPanel(ctk.CTkFrame):
             command=self._click_download,
             state="disabled",
         )
-        self.download_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.download_btn.grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
     def show(self, comp: Component) -> None:
         self._component = comp
@@ -661,6 +673,11 @@ class DetailPanel(ctk.CTkFrame):
 
         self.download_btn.configure(state="normal")
         self.preview_btn.configure(state="normal", text="Pré-visualizar")
+        self.image_btn.configure(
+            state="normal" if comp.image_url else "disabled",
+            text="Carregar imagem" if comp.image_url else "Sem imagem JLC",
+        )
+        self.clear_image("Clique em Carregar imagem.")
         self.preview_panel.clear("Preview: clique em Pré-visualizar para carregar.")
 
         for child in self.scroll.winfo_children():
@@ -769,6 +786,10 @@ class DetailPanel(ctk.CTkFrame):
         if self._component:
             self.on_preview(self._component)
 
+    def _click_image(self) -> None:
+        if self._component:
+            self.on_image(self._component)
+
     def set_preview_running(self, running: bool) -> None:
         self.preview_btn.configure(
             state="disabled" if running else "normal",
@@ -803,6 +824,7 @@ class DetailPanel(ctk.CTkFrame):
         self.sub_lbl.configure(text="")
         self.download_btn.configure(state="disabled")
         self.preview_btn.configure(state="disabled", text="Pré-visualizar")
+        self.image_btn.configure(state="disabled", text="Carregar imagem")
         self.clear_image("Imagem JLC")
         self.preview_panel.clear("Preview: selecione um componente.")
         for child in self.scroll.winfo_children():

@@ -44,7 +44,7 @@ class JlcClient:
     def __init__(
         self,
         cache: DiskCache | None = None,
-        timeout: float = 7.0,
+        timeout: float = 4.0,
         session: requests.Session | None = None,
     ) -> None:
         self.cache = cache if cache is not None else DiskCache("jlc_search", ttl_seconds=6 * 3600)
