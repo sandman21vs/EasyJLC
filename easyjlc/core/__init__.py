@@ -1,5 +1,6 @@
 """Camada de back-end (sem dependência da GUI)."""
 
+from easyjlc.core.artifacts import KiCadArtifacts, find_kicad_artifacts
 from easyjlc.core.cache import DiskCache
 from easyjlc.core.easyeda import EasyEdaError, EasyEdaRunner
 from easyjlc.core.jlc_api import JlcApiError, JlcClient
@@ -32,6 +33,7 @@ __all__ = [
     "FootprintPreview",
     "JlcApiError",
     "JlcClient",
+    "KiCadArtifacts",
     "KiCadParseError",
     "Point",
     "PriceTier",
@@ -46,4 +48,5 @@ __all__ = [
     "parse_sexpr",
     "parse_symbol",
     "parse_symbol_file",
+    "find_kicad_artifacts",
 ]
