@@ -598,6 +598,7 @@ class SearchTab(ctk.CTkFrame):
             or self._selected is not None
             or self._current_components
         ):
+            self._set_searching(False)
             self.prev_btn.configure(state="disabled")
             self.next_btn.configure(state="disabled")
             return
@@ -624,6 +625,7 @@ class SearchTab(ctk.CTkFrame):
             self._watchdog_job = None
         self._drain_message_queue()
         self.client.reset_session()
+        self._set_searching(False)
         self._clear_results()
         self.results_header.configure(text="Digite uma nova busca e pressione Buscar.")
         self.detail.reset("Busca reiniciada.")
