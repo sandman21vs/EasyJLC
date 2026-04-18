@@ -27,7 +27,7 @@ Sucessor dos scripts `jlc_downloader.py` / `.bat` (preservados em [`legacy/`](le
 ### Linux — AppImage (recomendado, qualquer distro x86-64)
 
 ```bash
-wget https://github.com/<user>/EasyJLC/releases/download/v0.1.0/EasyJLC-0.1.0-x86_64.AppImage
+wget https://github.com/sandman21vs/EasyJLC/releases/download/v0.1.0/EasyJLC-0.1.0-x86_64.AppImage
 chmod +x EasyJLC-0.1.0-x86_64.AppImage
 ./EasyJLC-0.1.0-x86_64.AppImage
 ```
@@ -37,7 +37,7 @@ Requer `python3 >= 3.10` no sistema (presente por default na maioria das distros
 ### Linux — pacote `.deb` (Debian / Ubuntu / Mint / Pop!_OS)
 
 ```bash
-wget https://github.com/<user>/EasyJLC/releases/download/v0.1.0/easyjlc_0.1.0_amd64.deb
+wget https://github.com/sandman21vs/EasyJLC/releases/download/v0.1.0/easyjlc_0.1.0_amd64.deb
 sudo dpkg -i easyjlc_0.1.0_amd64.deb
 # se faltar alguma dep:
 sudo apt-get install -f
@@ -52,7 +52,7 @@ Binário `.exe` em preparação (Sprint 5 follow-up). Por enquanto, rode a parti
 ### A partir do código-fonte
 
 ```bash
-git clone https://github.com/<user>/EasyJLC.git
+git clone https://github.com/sandman21vs/EasyJLC.git
 cd EasyJLC
 ./scripts/run_dev.sh          # Linux / macOS
 # ou
