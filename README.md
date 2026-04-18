@@ -1,30 +1,31 @@
 # EasyJLC
 
-GUI multiplataforma para buscar, pré-visualizar e baixar símbolos + footprints KiCad direto do catálogo **LCSC / JLCPCB**, com preço, estoque e histórico de downloads.
+Cross-platform GUI to search, preview, and download KiCad symbols + footprints directly from the **LCSC / JLCPCB** catalog, with price, stock, and download history.
 
-Sucessor dos scripts `jlc_downloader.py` / `.bat` (preservados em [`legacy/`](legacy/)).
+Successor to the `jlc_downloader.py` / `.bat` scripts (preserved in [`legacy/`](legacy/)).
 
-![Licença](https://img.shields.io/badge/license-GPL--3.0--or--later-blue) ![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![Plataforma](https://img.shields.io/badge/linux-x86__64-green) ![Idiomas](https://img.shields.io/badge/i18n-pt--BR%20%7C%20en%20%7C%20de-orange)
-
----
-
-## Recursos
-
-- **Busca**: MPN, LCSC ID ou palavra-chave. Paginada, com thumbnails, badge Basic/Extended e ordenação por estoque/preço.
-- **Preview KiCad renderizado**: símbolo (pinos, retângulos, polylines) e footprint (pads rotacionados, silkscreen por camada) desenhados em `tk.Canvas`, com zoom e pan.
-- **Download completo**: símbolo + footprint via `easyeda2kicad`, em venv isolado gerenciado pelo app.
-- **Preço + estoque** (JLCPCB API), com faixa por quantidade e link direto para o datasheet.
-- **Histórico** persistente: rebaixar, abrir pasta, copiar LCSC ID.
-- **Pasta default multiplataforma**: `~/Documents/EasyJLC` (via `platformdirs`).
-- **Aba Documentação** embutida com guia de como apontar as bibliotecas do KiCad para os componentes baixados.
-- **Multi-idioma**: pt-BR, inglês, alemão — selecionável no header (aplica no próximo start). Estrutura pronta para outros idiomas via JSON.
-- **Tema claro/escuro/sistema** via CustomTkinter.
+![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue) ![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![Platform](https://img.shields.io/badge/linux%20%7C%20windows-x86__64-green) ![Languages](https://img.shields.io/badge/i18n-pt--BR%20%7C%20en%20%7C%20de-orange)
 
 ---
 
-## Instalação
+## Features
 
-### Linux — AppImage (recomendado, qualquer distro x86-64)
+- **Search**: MPN, LCSC ID, or keyword. Paginated, with thumbnails, Basic/Extended badges, and stock/price sorting.
+- **Search filters**: filter results by library type (Basic/Extended), package, minimum stock, and maximum price — applied instantly without a new API call.
+- **Rendered KiCad preview**: symbol (pins, rectangles, polylines) and footprint (rotated pads, silkscreen per layer) drawn on a `tk.Canvas` with zoom and pan.
+- **Full download**: symbol + footprint via `easyeda2kicad`, in an isolated venv managed by the app.
+- **Price + stock** (JLCPCB API), with quantity price breaks and a direct link to the datasheet.
+- **Persistent history**: re-download, open folder, copy LCSC ID.
+- **Cross-platform default folder**: `~/Documents/EasyJLC` (via `platformdirs`).
+- **Built-in Documentation tab**: step-by-step guide for pointing KiCad libraries to downloaded components.
+- **Multi-language**: pt-BR, English, German — selectable in the header (applies on next start). Ready for more languages via JSON.
+- **Light/dark/system theme** via CustomTkinter.
+
+---
+
+## Installation
+
+### Linux — AppImage (recommended, any x86-64 distro)
 
 ```bash
 wget https://github.com/sandman21vs/EasyJLC/releases/download/v0.1.0/EasyJLC-0.1.0-x86_64.AppImage
@@ -32,129 +33,131 @@ chmod +x EasyJLC-0.1.0-x86_64.AppImage
 ./EasyJLC-0.1.0-x86_64.AppImage
 ```
 
-Requer `python3 >= 3.10` no sistema (presente por default na maioria das distros) — usado para criar um venv isolado para o `easyeda2kicad` na primeira execução.
+Requires `python3 >= 3.10` on the system (present by default on most distros) — used to create an isolated venv for `easyeda2kicad` on first run.
 
-### Linux — pacote `.deb` (Debian / Ubuntu / Mint / Pop!_OS)
+### Linux — `.deb` package (Debian / Ubuntu / Mint / Pop!_OS)
 
 ```bash
 wget https://github.com/sandman21vs/EasyJLC/releases/download/v0.1.0/easyjlc_0.1.0_amd64.deb
 sudo dpkg -i easyjlc_0.1.0_amd64.deb
-# se faltar alguma dep:
+# if dependencies are missing:
 sudo apt-get install -f
 ```
 
-O app aparece no menu de aplicações; para desinstalar: `sudo apt remove easyjlc`.
+The app appears in the application menu; to uninstall: `sudo apt remove easyjlc`.
 
 ### Windows
 
-Binário `.exe` em preparação (Sprint 5 follow-up). Por enquanto, rode a partir do código-fonte — veja abaixo.
+Download `easyjlc.exe` from the [latest release](https://github.com/sandman21vs/EasyJLC/releases/latest) and run it directly — no installation required.
 
-### A partir do código-fonte
+### From source
 
 ```bash
 git clone https://github.com/sandman21vs/EasyJLC.git
 cd EasyJLC
 ./scripts/run_dev.sh          # Linux / macOS
-# ou
+# or
 scripts\run_dev.bat           # Windows
 ```
 
-Os scripts criam um venv em `.venv/`, instalam dependências de `requirements.txt` e executam `python -m easyjlc`.
+The scripts create a venv in `.venv/`, install dependencies from `requirements.txt`, and run `python -m easyjlc`.
 
 ---
 
-## Primeiro uso
+## First use
 
-1. **Pasta de saída**: por padrão `~/Documents/EasyJLC`. Sobrescreva na aba **Download direto** se preferir a pasta do projeto KiCad (recomendado — facilita compartilhar o projeto sem perder componentes).
-2. **easyeda2kicad**: na primeira execução o app provisiona um venv isolado (~30–60 s, só uma vez) em `~/.local/share/EasyJLC/easyeda2kicad-venv/`.
-3. **Configurar KiCad**: a aba **Documentação** tem o passo-a-passo para adicionar a biblioteca baixada ao **Symbol Library Manager** e **Footprint Library Manager**, incluindo como usar `${KIPRJMOD}` para caminhos relativos ao projeto.
-
----
-
-## Idiomas
-
-Troque o idioma no menu dropdown à direita do header. O arquivo de catálogo fica em `easyjlc/resources/i18n/<lang>.json` — pt-BR é a chave identidade (strings pt-BR são as próprias chaves, sem necessidade de catálogo).
-
-Para adicionar um idioma novo:
-
-1. Copie `easyjlc/resources/i18n/en.json` para `<código>.json`.
-2. Traduza os valores (mantenha placeholders como `{lcsc_id}`, `{stock:,}`, `{query}` intactos).
-3. Adicione o código em `SUPPORTED_LANGUAGES` em `easyjlc/i18n.py`.
+1. **Output folder**: defaults to `~/Documents/EasyJLC`. Override it in the **Direct Download** tab — using your KiCad project folder is recommended (makes it easy to share the project without losing components).
+2. **easyeda2kicad**: on first run the app provisions an isolated venv (~30–60 s, once only) at `~/.local/share/EasyJLC/easyeda2kicad-venv/`.
+3. **Configure KiCad**: the **Documentation** tab has a step-by-step guide for adding the downloaded library to the **Symbol Library Manager** and **Footprint Library Manager**, including how to use `${KIPRJMOD}` for project-relative paths.
 
 ---
 
-## Construindo seu próprio binário
+## Languages
+
+Switch the language in the dropdown on the right side of the header. Catalog files are at `easyjlc/resources/i18n/<lang>.json` — pt-BR is the identity key (pt-BR strings are the keys themselves, no catalog file needed).
+
+To add a new language:
+
+1. Copy `easyjlc/resources/i18n/en.json` to `<code>.json`.
+2. Translate the values (keep placeholders like `{lcsc_id}`, `{stock:,}`, `{query}` intact).
+3. Add the code to `SUPPORTED_LANGUAGES` in `easyjlc/i18n.py`.
+
+---
+
+## Building your own binary
 
 ```bash
 ./scripts/build_release.sh          # dist/easyjlc (onefile, ~24 MB)
 ./packaging/build_appimage.sh       # dist/EasyJLC-<v>-x86_64.AppImage
 ./packaging/build_deb.sh            # dist/easyjlc_<v>_amd64.deb
+# Windows (run in the project root with .venv active):
+python -m PyInstaller packaging/easyjlc-windows.spec --noconfirm
 ```
 
-O `build_appimage.sh` espera `appimagetool` em `/tmp/appimagetool`. Baixe de [AppImage/appimagetool/releases](https://github.com/AppImage/appimagetool/releases) e dê `chmod +x`.
+`build_appimage.sh` expects `appimagetool` at `/tmp/appimagetool`. Download it from [AppImage/appimagetool/releases](https://github.com/AppImage/appimagetool/releases) and `chmod +x`.
 
 ---
 
-## Desenvolvimento
+## Development
 
 ```bash
 python -m pip install -e .[dev]
-python -m pytest                     # 60 testes
-python -m easyjlc                    # roda a GUI
+python -m pytest                     # 60 tests
+python -m easyjlc                    # run the GUI
 ```
 
-### Estrutura
+### Structure
 
 ```
 easyjlc/
-├── app.py                 # ponto de entrada GUI
-├── config.py              # paths XDG / AppData, logging
-├── settings.py            # preferências persistentes
-├── history.py             # histórico de downloads
-├── i18n.py                # catálogo gettext-style
+├── app.py                 # GUI entry point
+├── config.py              # XDG / AppData paths, logging
+├── settings.py            # persistent preferences
+├── history.py             # download history
+├── i18n.py                # gettext-style catalog
 ├── core/
-│   ├── easyeda.py         # runner subprocess do easyeda2kicad
-│   ├── jlc_api.py         # cliente REST JLCPCB/LCSC
-│   ├── kicad_parse.py     # parser S-expr .kicad_sym / .kicad_mod
+│   ├── easyeda.py         # easyeda2kicad subprocess runner
+│   ├── jlc_api.py         # JLCPCB/LCSC REST client
+│   ├── kicad_parse.py     # S-expr parser for .kicad_sym / .kicad_mod
 │   └── models.py
 ├── ui/                    # tabs: search, download, history, docs, log
 └── resources/
     ├── icons/
     └── i18n/              # pt-BR.json, en.json, de.json
-packaging/                 # specs PyInstaller + scripts AppImage/.deb
+packaging/                 # PyInstaller specs + AppImage/.deb scripts
 scripts/                   # run_dev.sh, build_release.sh
 tests/                     # pytest
-legacy/                    # scripts originais do SandKrux (referência)
+legacy/                    # original SandKrux scripts (reference)
 ```
 
-### Princípios
+### Principles
 
-- `core/` não importa `ui/` — facilita testes e um futuro CLI.
-- `easyeda2kicad` é a engine de download oficial, invocada via subprocess num venv isolado gerido pelo app.
-- Parser S-expr minimal para `.kicad_sym` (≥ KiCad 7) e `.kicad_mod` — suficiente para preview, sem dependência do KiCad instalado.
+- `core/` does not import `ui/` — simplifies testing and a future CLI.
+- `easyeda2kicad` is the official download engine, invoked via subprocess in an isolated venv managed by the app.
+- Minimal S-expr parser for `.kicad_sym` (≥ KiCad 7) and `.kicad_mod` — sufficient for preview, no KiCad installation required.
 
 ---
 
 ## Roadmap
 
-Completo em [`PLAN.md`](PLAN.md). Resumo do que falta:
+Full details in [`PLAN.md`](PLAN.md). What's left:
 
-- [ ] Build Windows (`.exe`)
-- [ ] Ícone oficial (atual é placeholder)
-- [ ] Filtros na busca (categoria, pacote, faixa de estoque/preço)
-- [ ] BOM loader (importar `.csv` KiCad e baixar em lote)
-- [ ] Build macOS + CI GitHub Actions
-
----
-
-## Créditos
-
-- [**easyeda2kicad**](https://github.com/uPesy/easyeda2kicad.py) — engine de conversão EasyEDA → KiCad
-- [**SandKrux/KiCad-Tools**](https://github.com/SandKrux/KiCad-Tools) — inspiração dos scripts originais em `legacy/`
-- [**Import-LIB-KiCad-Plugin**](https://github.com/Steffen-W/Import-LIB-KiCad-Plugin) — referência de UX para busca paginada
+- [x] Windows build (`.exe`)
+- [x] Search filters (category, package, stock/price range)
+- [ ] Official icon (current is placeholder)
+- [ ] BOM loader (import KiCad `.csv` and batch download)
+- [ ] macOS build + GitHub Actions CI
 
 ---
 
-## Licença
+## Credits
+
+- [**easyeda2kicad**](https://github.com/uPesy/easyeda2kicad.py) — EasyEDA → KiCad conversion engine
+- [**SandKrux/KiCad-Tools**](https://github.com/SandKrux/KiCad-Tools) — inspiration for the original scripts in `legacy/`
+- [**Import-LIB-KiCad-Plugin**](https://github.com/Steffen-W/Import-LIB-KiCad-Plugin) — UX reference for paginated search
+
+---
+
+## License
 
 [GPL-3.0-or-later](LICENSE).

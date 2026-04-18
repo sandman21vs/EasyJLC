@@ -54,6 +54,7 @@ class SearchTab(ctk.CTkFrame):
         self.on_log = on_log
 
         self._msg_queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
+        self._raw_items: list[Component] = []
         self._current_components: list[Component] = []
         self._selected: Component | None = None
         self._current_page = 1
@@ -67,6 +68,12 @@ class SearchTab(ctk.CTkFrame):
         self._search_request_id = 0
         self._preview_request_id = 0
         self._search_running = False
+
+        # Filter state
+        self._filter_type_var = ctk.StringVar(value="All")
+        self._filter_package_var = ctk.StringVar(value="")
+        self._filter_stock_var = ctk.StringVar(value="")
+        self._filter_price_var = ctk.StringVar(value="")
         # Serializa chamadas HTTP à API JLC: se o usuário cancelar e buscar de
         # novo, o novo worker espera o anterior sair antes de mandar request.
         # Sem isso, múltiplas threads batem no WAF simultaneamente e travam.
@@ -83,10 +90,10 @@ class SearchTab(ctk.CTkFrame):
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=2, minsize=320)
         self.grid_columnconfigure(1, weight=3, minsize=360)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
 
         search_bar = ctk.CTkFrame(self, fg_color="transparent")
-        search_bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        search_bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         search_bar.grid_columnconfigure(0, weight=1)
 
         self.query_var = ctk.StringVar()
@@ -104,9 +111,73 @@ class SearchTab(ctk.CTkFrame):
         )
         self.search_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
+        # Filter bar
+        filter_bar = ctk.CTkFrame(self, fg_color="transparent")
+        filter_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+
+        ctk.CTkLabel(filter_bar, text=t("Tipo:"), text_color="gray70", width=32, anchor="w").pack(
+            side="left", padx=(4, 2)
+        )
+        self._type_menu = ctk.CTkSegmentedButton(
+            filter_bar,
+            values=["All", "Basic", "Extended"],
+            variable=self._filter_type_var,
+            command=lambda _v: self._apply_filters(),
+            width=180,
+        )
+        self._type_menu.pack(side="left", padx=(0, 12))
+
+        ctk.CTkLabel(filter_bar, text=t("Package:"), text_color="gray70", anchor="w").pack(
+            side="left", padx=(0, 2)
+        )
+        pkg_entry = ctk.CTkEntry(
+            filter_bar,
+            textvariable=self._filter_package_var,
+            placeholder_text="0402, SOP-8…",
+            width=90,
+        )
+        pkg_entry.pack(side="left", padx=(0, 12))
+        pkg_entry.bind("<Return>", lambda _e: self._apply_filters())
+        pkg_entry.bind("<FocusOut>", lambda _e: self._apply_filters())
+
+        ctk.CTkLabel(filter_bar, text=t("Estoque ≥"), text_color="gray70", anchor="w").pack(
+            side="left", padx=(0, 2)
+        )
+        stk_entry = ctk.CTkEntry(
+            filter_bar,
+            textvariable=self._filter_stock_var,
+            placeholder_text="0",
+            width=60,
+        )
+        stk_entry.pack(side="left", padx=(0, 12))
+        stk_entry.bind("<Return>", lambda _e: self._apply_filters())
+        stk_entry.bind("<FocusOut>", lambda _e: self._apply_filters())
+
+        ctk.CTkLabel(filter_bar, text=t("Preço ≤ $"), text_color="gray70", anchor="w").pack(
+            side="left", padx=(0, 2)
+        )
+        price_entry = ctk.CTkEntry(
+            filter_bar,
+            textvariable=self._filter_price_var,
+            placeholder_text="∞",
+            width=60,
+        )
+        price_entry.pack(side="left", padx=(0, 4))
+        price_entry.bind("<Return>", lambda _e: self._apply_filters())
+        price_entry.bind("<FocusOut>", lambda _e: self._apply_filters())
+
+        ctk.CTkButton(
+            filter_bar,
+            text=t("Limpar"),
+            width=60,
+            fg_color="transparent",
+            border_width=1,
+            command=self._clear_filters,
+        ).pack(side="left", padx=(4, 0))
+
         # Resultados.
         left = ctk.CTkFrame(self)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
+        left.grid(row=2, column=0, sticky="nsew", padx=(0, 6))
         left.grid_columnconfigure(0, weight=1)
         left.grid_rowconfigure(1, weight=1)
 
@@ -141,7 +212,7 @@ class SearchTab(ctk.CTkFrame):
 
         # Detalhe.
         right = ctk.CTkFrame(self)
-        right.grid(row=1, column=1, sticky="nsew", padx=(6, 0))
+        right.grid(row=2, column=1, sticky="nsew", padx=(6, 0))
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(0, weight=1)
 
@@ -151,6 +222,78 @@ class SearchTab(ctk.CTkFrame):
             on_preview=self._start_preview,
         )
         self.detail.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+    # ---------- Filtros ----------
+
+    def _apply_filters(self) -> None:
+        if not self._raw_items:
+            return
+
+        lib_type = self._filter_type_var.get()
+        pkg = self._filter_package_var.get().strip().lower()
+        stock_text = self._filter_stock_var.get().strip()
+        price_text = self._filter_price_var.get().strip()
+
+        try:
+            min_stock = int(stock_text) if stock_text else 0
+        except ValueError:
+            min_stock = 0
+
+        try:
+            max_price = float(price_text) if price_text else None
+        except ValueError:
+            max_price = None
+
+        filtered: list[Component] = []
+        for comp in self._raw_items:
+            if lib_type == "Basic" and not comp.is_basic:
+                continue
+            if lib_type == "Extended" and comp.is_basic:
+                continue
+            if pkg and pkg not in comp.package.lower():
+                continue
+            if comp.stock < min_stock:
+                continue
+            if max_price is not None:
+                unit = comp.unit_price_for(1)
+                if unit is None or unit > max_price:
+                    continue
+            filtered.append(comp)
+
+        self._current_components = filtered
+        self._clear_results()
+        for idx, comp in enumerate(filtered):
+            self._build_result_row(idx, comp)
+        for comp in filtered:
+            self._prefetch_row_image(comp)
+
+        shown = len(filtered)
+        total = len(self._raw_items)
+        if shown == total:
+            self.results_header.configure(
+                text=t("{total} resultados — mostrando {shown}", total=total, shown=shown)
+            )
+        else:
+            self.results_header.configure(
+                text=t(
+                    "{total} resultados — mostrando {shown}",
+                    total=total,
+                    shown=shown,
+                )
+                + f" ({t('filtrado')})"
+            )
+
+        if filtered:
+            self._select(filtered[0])
+        else:
+            self.detail.reset(t("Nenhum componente passa pelos filtros atuais."))
+
+    def _clear_filters(self) -> None:
+        self._filter_type_var.set("All")
+        self._filter_package_var.set("")
+        self._filter_stock_var.set("")
+        self._filter_price_var.set("")
+        self._apply_filters()
 
     # ---------- Ações ----------
 
@@ -260,7 +403,7 @@ class SearchTab(ctk.CTkFrame):
         if req_id != self._search_request_id:
             return
         self._set_searching(False)
-        self._current_components = result.items
+        self._raw_items = result.items
         self._total_pages = result.total_pages
         self._results_query = self._current_query
 
@@ -281,21 +424,9 @@ class SearchTab(ctk.CTkFrame):
                 f"{result.fallback_reason}"
             )
         else:
-            self.results_header.configure(
-                text=t(
-                    "{total} resultados — mostrando {shown}",
-                    total=result.total,
-                    shown=len(result.items),
-                )
-            )
             self.on_log(
                 f'[busca] {result.total} resultados, exibindo {len(result.items)} na página {result.page}'
             )
-
-        self._clear_results()
-
-        for idx, comp in enumerate(result.items):
-            self._build_result_row(idx, comp)
 
         self.page_label.configure(
             text=(
@@ -309,13 +440,7 @@ class SearchTab(ctk.CTkFrame):
             state="normal" if result.page < result.total_pages else "disabled"
         )
 
-        # Pré-carrega thumbnails de todos os componentes da página atual.
-        for comp in result.items:
-            self._prefetch_row_image(comp)
-
-        if result.items:
-            # Auto-seleciona primeiro resultado → dispara preview (símbolo+footprint).
-            self._select(result.items[0])
+        self._apply_filters()
 
     def _render_error(self, req_id: int, message: str) -> None:
         if req_id != self._search_request_id:

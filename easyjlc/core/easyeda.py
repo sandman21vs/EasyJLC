@@ -17,6 +17,10 @@ log = logging.getLogger("easyjlc.easyeda")
 
 LogCallback = Callable[[str], None]
 
+_NO_WINDOW: dict = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+)
+
 DEFAULT_EXTRA_PACKAGES: tuple[str, ...] = (
     "typing_extensions>=4.14.1",
     "pydantic>=2.11",
@@ -198,6 +202,7 @@ def _runner_responds(cmd: Sequence[str]) -> bool:
             capture_output=True,
             text=True,
             timeout=30,
+            **_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -214,6 +219,7 @@ def _run_streaming(cmd: Sequence[str], cb: LogCallback) -> int:
             bufsize=1,
             encoding="utf-8",
             errors="replace",
+            **_NO_WINDOW,
         )
     except OSError as exc:
         cb(f"Falha ao iniciar processo: {exc}")
