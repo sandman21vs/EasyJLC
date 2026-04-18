@@ -67,6 +67,7 @@ class SearchTab(ctk.CTkFrame):
         self._image_token = 0
         self._image_cache: dict[str, Image.Image] = {}
         self._search_token = 0
+        self._preview_token = 0
         self._search_running = False
         self._pending_search: tuple[str, int] | None = None
         self._last_search_key: tuple[str, int] | None = None
@@ -181,6 +182,7 @@ class SearchTab(ctk.CTkFrame):
         self._current_page = page
         self._selected = None
         self._image_token += 1
+        self._preview_token += 1
         self._pending_search = (query, page)
         self._set_searching(True)
         self._clear_results()
@@ -219,11 +221,11 @@ class SearchTab(ctk.CTkFrame):
                     token, message = payload  # type: ignore[misc]
                     self._render_error(int(token), str(message))
                 elif kind == "preview_ok":
-                    lcsc_id, artifacts = payload  # type: ignore[misc]
-                    self._render_preview(str(lcsc_id), artifacts)
+                    token, lcsc_id, artifacts = payload  # type: ignore[misc]
+                    self._render_preview(int(token), str(lcsc_id), artifacts)
                 elif kind == "preview_err":
-                    lcsc_id, message = payload  # type: ignore[misc]
-                    self._render_preview_error(str(lcsc_id), str(message))
+                    token, lcsc_id, message = payload  # type: ignore[misc]
+                    self._render_preview_error(int(token), str(lcsc_id), str(message))
                 elif kind == "image_ok":
                     token, lcsc_id, data = payload  # type: ignore[misc]
                     self._render_image(int(token), str(lcsc_id), data)  # type: ignore[arg-type]
@@ -392,22 +394,23 @@ class SearchTab(ctk.CTkFrame):
 
     def _start_preview(self, comp: Component) -> None:
         if self._preview_worker and self._preview_worker.is_alive():
-            self.on_log("Já há um preview em andamento.")
-            return
+            self.on_log("[preview] preview anterior ainda finalizando; iniciando novo e ignorando o anterior")
 
-        self.on_log(f"[preview {comp.lcsc_id}] solicitado na aba Buscar")
+        self._preview_token += 1
+        token = self._preview_token
+        self.on_log(f"[preview {comp.lcsc_id}] solicitado na aba Buscar token={token}")
         self.detail.set_preview_running(True)
         self._preview_worker = threading.Thread(
-            target=self._worker_preview, args=(comp.lcsc_id,), daemon=True
+            target=self._worker_preview, args=(token, comp.lcsc_id), daemon=True
         )
         self._preview_worker.start()
 
-    def _worker_preview(self, lcsc_id: str) -> None:
+    def _worker_preview(self, token: int, lcsc_id: str) -> None:
         preview_dir = _preview_dir(lcsc_id)
         try:
             preview_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            self._msg_queue.put(("preview_err", (lcsc_id, f"Falha ao criar cache: {exc}")))
+            self._msg_queue.put(("preview_err", (token, lcsc_id, f"Falha ao criar cache: {exc}")))
             return
 
         existing = find_kicad_artifacts(preview_dir, lcsc_id=lcsc_id)
@@ -419,7 +422,7 @@ class SearchTab(ctk.CTkFrame):
             )
         )
         if existing.has_all:
-            self._msg_queue.put(("preview_ok", (lcsc_id, existing)))
+            self._msg_queue.put(("preview_ok", (token, lcsc_id, existing)))
             return
 
         def cb(line: str) -> None:
@@ -428,15 +431,15 @@ class SearchTab(ctk.CTkFrame):
         try:
             rc = self.runner.download(lcsc_id, preview_dir, log_cb=cb)
         except EasyEdaError as exc:
-            self._msg_queue.put(("preview_err", (lcsc_id, str(exc))))
+            self._msg_queue.put(("preview_err", (token, lcsc_id, str(exc))))
             return
         except Exception as exc:  # pragma: no cover — defesa extra
             log.exception("Erro inesperado no preview")
-            self._msg_queue.put(("preview_err", (lcsc_id, f"Erro inesperado: {exc}")))
+            self._msg_queue.put(("preview_err", (token, lcsc_id, f"Erro inesperado: {exc}")))
             return
 
         if rc != 0:
-            self._msg_queue.put(("preview_err", (lcsc_id, f"easyeda2kicad retornou {rc}")))
+            self._msg_queue.put(("preview_err", (token, lcsc_id, f"easyeda2kicad retornou {rc}")))
             return
 
         artifacts = find_kicad_artifacts(preview_dir, lcsc_id=lcsc_id)
@@ -447,18 +450,28 @@ class SearchTab(ctk.CTkFrame):
                 f"symbol={artifacts.symbol or '-'} footprint={artifacts.footprint or '-'}",
             )
         )
-        self._msg_queue.put(("preview_ok", (lcsc_id, artifacts)))
+        self._msg_queue.put(("preview_ok", (token, lcsc_id, artifacts)))
 
-    def _render_preview(self, lcsc_id: str, artifacts) -> None:
-        if self._selected is None or self._selected.lcsc_id != lcsc_id:
+    def _render_preview(self, token: int, lcsc_id: str, artifacts) -> None:
+        if (
+            token != self._preview_token
+            or self._selected is None
+            or self._selected.lcsc_id != lcsc_id
+        ):
+            self.on_log(f"[preview {lcsc_id}] ignorando preview antigo token={token}")
             return
         self.detail.set_preview_running(False)
         warnings = self.detail.show_preview(artifacts, lcsc_id=lcsc_id)
         for warning in warnings:
             self.on_log(f"[preview {lcsc_id}] {warning}")
 
-    def _render_preview_error(self, lcsc_id: str, message: str) -> None:
-        if self._selected is None or self._selected.lcsc_id != lcsc_id:
+    def _render_preview_error(self, token: int, lcsc_id: str, message: str) -> None:
+        if (
+            token != self._preview_token
+            or self._selected is None
+            or self._selected.lcsc_id != lcsc_id
+        ):
+            self.on_log(f"[preview {lcsc_id}] ignorando erro antigo token={token}: {message}")
             return
         self.detail.set_preview_running(False)
         self.detail.clear_preview(f"Preview falhou: {message}")
@@ -549,8 +562,7 @@ class SearchTab(ctk.CTkFrame):
 
     def _on_query_changed(self, *_args) -> None:
         if self.query_var.get().strip() != self._results_query:
-            self.prev_btn.configure(state="disabled")
-            self.next_btn.configure(state="disabled")
+            self._interrupt_search_engine("campo de busca alterado")
 
     def _search_watchdog(self, token: int, query: str, page: int) -> None:
         if token != self._search_token or not self._search_running:
@@ -578,6 +590,50 @@ class SearchTab(ctk.CTkFrame):
 
         self.results_header.configure(text=f"Busca demorou demais para “{query}”")
         self.detail.reset("Busca demorou demais. Tente novamente ou use um LCSC ID exato.")
+
+    def _interrupt_search_engine(self, reason: str) -> None:
+        if not (
+            self._search_running
+            or self._pending_search
+            or self._selected is not None
+            or self._current_components
+        ):
+            self.prev_btn.configure(state="disabled")
+            self.next_btn.configure(state="disabled")
+            return
+
+        self.on_log(f"[busca] interrompendo processos: {reason}")
+        self._search_token += 1
+        self._image_token += 1
+        self._preview_token += 1
+        self._search_running = False
+        self._pending_search = None
+        self._selected = None
+        self._current_components = []
+        self._current_page = 1
+        self._total_pages = 1
+        self._results_query = ""
+        self._worker = None
+        self._image_worker = None
+        self._preview_worker = None
+        if self._watchdog_job is not None:
+            try:
+                self.after_cancel(self._watchdog_job)
+            except Exception:
+                pass
+            self._watchdog_job = None
+        self._drain_message_queue()
+        self.client.reset_session()
+        self._clear_results()
+        self.results_header.configure(text="Digite uma nova busca e pressione Buscar.")
+        self.detail.reset("Busca reiniciada.")
+
+    def _drain_message_queue(self) -> None:
+        try:
+            while True:
+                self._msg_queue.get_nowait()
+        except queue.Empty:
+            return
 
 
 class DetailPanel(ctk.CTkFrame):

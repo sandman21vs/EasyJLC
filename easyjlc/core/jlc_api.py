@@ -52,6 +52,15 @@ class JlcClient:
         self.session = session or requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
 
+    def reset_session(self) -> None:
+        """Reinicia a sessão HTTP usada pela busca."""
+        try:
+            self.session.close()
+        except Exception:
+            pass
+        self.session = requests.Session()
+        self.session.headers.update(DEFAULT_HEADERS)
+
     def search(
         self,
         query: str,
