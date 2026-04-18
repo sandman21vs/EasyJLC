@@ -33,6 +33,7 @@ log = logging.getLogger("easyjlc.search_tab")
 
 POLL_MS = 80
 PAGE_SIZE = 20
+SEARCH_WATCHDOG_MS = 8000
 LCSC_ID_RE = re.compile(r"^C\d+$", re.IGNORECASE)
 
 
@@ -70,6 +71,7 @@ class SearchTab(ctk.CTkFrame):
         self._pending_search: tuple[str, int] | None = None
         self._last_search_key: tuple[str, int] | None = None
         self._last_search_at = 0.0
+        self._watchdog_job: str | None = None
 
         self._build_ui()
         self.after(POLL_MS, self._poll_queue)
@@ -188,6 +190,12 @@ class SearchTab(ctk.CTkFrame):
             target=self._worker_search, args=(token, query, page), daemon=True
         )
         self._worker.start()
+        if self._watchdog_job is not None:
+            self.after_cancel(self._watchdog_job)
+        self._watchdog_job = self.after(
+            SEARCH_WATCHDOG_MS,
+            lambda t=token, q=query, p=page: self._search_watchdog(t, q, p),
+        )
 
     def _worker_search(self, token: int, query: str, page: int) -> None:
         try:
@@ -229,6 +237,7 @@ class SearchTab(ctk.CTkFrame):
         if token != self._search_token:
             self.on_log(f"[busca] ignorando resultado antigo token={token}")
             return
+        self._watchdog_job = None
         self._pending_search = None
         self._set_searching(False)
         self._current_components = result.items
@@ -273,6 +282,7 @@ class SearchTab(ctk.CTkFrame):
         if token != self._search_token:
             self.on_log(f"[busca] ignorando erro antigo token={token}: {message}")
             return
+        self._watchdog_job = None
         self._pending_search = None
         self._set_searching(False)
         self.results_header.configure(text=f"Erro: {message}")
@@ -536,6 +546,33 @@ class SearchTab(ctk.CTkFrame):
         if self.query_var.get().strip() != self._results_query:
             self.prev_btn.configure(state="disabled")
             self.next_btn.configure(state="disabled")
+
+    def _search_watchdog(self, token: int, query: str, page: int) -> None:
+        if token != self._search_token or not self._search_running:
+            return
+
+        self.on_log(
+            f'[busca] timeout local token={token} após {SEARCH_WATCHDOG_MS / 1000:.0f}s; '
+            "liberando UI e tentando fallback"
+        )
+        self._search_token += 1
+        self._pending_search = None
+        self._set_searching(False)
+
+        fallback = self.client.fallback_search(
+            query,
+            page=page,
+            page_size=PAGE_SIZE,
+            reason="Timeout local da busca JLCPCB",
+        )
+        if fallback is not None:
+            self._current_query = query
+            self._current_page = page
+            self._render_results(self._search_token, fallback)
+            return
+
+        self.results_header.configure(text=f"Busca demorou demais para “{query}”")
+        self.detail.reset("Busca demorou demais. Tente novamente ou use um LCSC ID exato.")
 
 
 class DetailPanel(ctk.CTkFrame):

@@ -152,6 +152,16 @@ class JlcClient:
 
         return None
 
+    def fallback_search(
+        self,
+        query: str,
+        page: int = 1,
+        page_size: int = 25,
+        reason: str = "Fallback local",
+    ) -> SearchResult | None:
+        cache_key = f"search::{query.strip()}::p{page}::s{page_size}"
+        return self._fallback_result(query.strip(), page, page_size, cache_key, reason)
+
 
 def _fallback_exact_result(
     query: str,

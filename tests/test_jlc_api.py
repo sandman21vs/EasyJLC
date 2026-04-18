@@ -143,6 +143,15 @@ def test_search_http_error_uses_local_preview_for_text(tmp_path: Path, monkeypat
     assert "previews locais" in result.fallback_reason
 
 
+def test_public_fallback_search_for_exact_lcsc(tmp_path: Path):
+    client = _make_client(tmp_path, MagicMock())
+    result = client.fallback_search("C129733", reason="timeout")
+
+    assert result is not None
+    assert result.items[0].lcsc_id == "C129733"
+    assert result.fallback_reason == "timeout"
+
+
 def test_search_api_error_code(tmp_path: Path):
     session = MagicMock()
     session.post.return_value = _fake_response(200, {"code": 101, "message": "oops"})
