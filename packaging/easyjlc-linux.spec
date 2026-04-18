@@ -13,10 +13,14 @@ ROOT = Path(SPECPATH).resolve().parent
 
 datas = []
 datas += collect_data_files("customtkinter")
+datas += collect_data_files("certifi")
 datas += [(str(ROOT / "easyjlc" / "resources" / "i18n"), "easyjlc/resources/i18n")]
 
 hiddenimports = []
 hiddenimports += collect_submodules("customtkinter")
+# Pillow carrega plugins de formato (JPEG, PNG, WebP) dinamicamente em Image.open;
+# PyInstaller não detecta por import estático.
+hiddenimports += collect_submodules("PIL")
 
 
 a = Analysis(

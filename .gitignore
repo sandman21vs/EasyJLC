@@ -45,3 +45,9 @@ logs/
 
 # OS files
 Thumbs.db
+
+# Reference plugin (upstream repo, kept locally for docs)
+legacy/Import-LIB-KiCad-Plugin/
+
+# Editor/IDE
+.codex

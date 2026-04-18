@@ -548,8 +548,10 @@ class SearchTab(ctk.CTkFrame):
             try:
                 resp = requests.get(url, timeout=12, headers=DEFAULT_HEADERS)
                 resp.raise_for_status()
-            except requests.RequestException as exc:
-                self._msg_queue.put(("log", f"[imagem {lcsc_id}] falhou: {exc}"))
+            except Exception as exc:  # inclui SSLError, ImportError de plugins etc.
+                self._msg_queue.put(
+                    ("log", f"[imagem {lcsc_id}] falhou: {type(exc).__name__}: {exc}")
+                )
                 self._msg_queue.put(("image_err", (lcsc_id, url)))
                 return
             self._msg_queue.put(("image_ok", (lcsc_id, url, resp.content)))
@@ -560,13 +562,13 @@ class SearchTab(ctk.CTkFrame):
             return  # página mudou ou row foi removida
         try:
             image = Image.open(BytesIO(data))
-        except OSError:
+            image = image.convert("RGBA")
+            image.thumbnail((56, 56), Image.Resampling.LANCZOS)
+            ctk_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
+        except Exception as exc:  # plugin PIL ausente em build frozen etc.
             label.configure(text="?", image="")
-            self.on_log(f"[imagem {lcsc_id}] bytes inválidos")
+            self.on_log(f"[imagem {lcsc_id}] render falhou: {type(exc).__name__}: {exc}")
             return
-        image = image.convert("RGBA")
-        image.thumbnail((56, 56), Image.Resampling.LANCZOS)
-        ctk_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
         self._row_image_refs[lcsc_id] = ctk_image
         label.configure(image=ctk_image, text="")
 
